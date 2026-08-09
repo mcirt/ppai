@@ -1,0 +1,385 @@
+{
+  "events": [
+    {
+      "action": "Game Initialized",
+      "details": {
+        "initialTileData": {
+          "1": "emoji1",
+          "2": "emoji2",
+          "3": "emoji3",
+          "4": "emoji4",
+          "5": "emoji5",
+          "6": "emoji6",
+          "7": "emoji7",
+          "8": "emoji8",
+          "9": "emoji9",
+          "10": "emoji10",
+          "11": "emoji11",
+          "12": "emoji12",
+          "13": "emoji13",
+          "14": "emoji14",
+          "15": "emoji16",
+          "16": "emoji17",
+          "17": "emoji1",
+          "18": "emoji2",
+          "19": "emoji4",
+          "20": "emoji5",
+          "21": "emoji7",
+          "22": "emoji8",
+          "23": "emoji10",
+          "24": "emoji11",
+          "25": "emoji13",
+          "26": "emoji14",
+          "27": "emoji16",
+          "28": "emoji17",
+          "29": "emoji1",
+          "30": "emoji2",
+          "31": "emoji16",
+          "32": "emoji4",
+          "33": "emoji5",
+          "34": "emoji7",
+          "35": "emoji8",
+          "36": "emoji10",
+          "37": "emoji11",
+          "38": "emoji14",
+          "39": "emoji13",
+          "40": "emoji17",
+          "41": "emoji16",
+          "42": "emoji10",
+          "43": "emoji11",
+          "44": "emoji2",
+          "45": "emoji1",
+          "46": "emoji4",
+          "47": "emoji5",
+          "48": "emoji13",
+          "49": "emoji14",
+          "50": "emoji7",
+          "51": "emoji8",
+          "52": "emoji17"
+        }
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 31
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 31,
+        "o": 52
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 28,
+        "b": 27
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 51,
+        "b": 21
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 50,
+        "b": 22
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 26,
+        "b": 25
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 49
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 49,
+        "o": 48
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 47,
+        "b": 19
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 46,
+        "b": 20
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 24,
+        "b": 23
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 45,
+        "b": 18
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 44,
+        "b": 17
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 43
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 43,
+        "o": 42
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 41,
+        "b": 16
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 40,
+        "b": 15
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 39,
+        "b": 14
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 38,
+        "b": 13
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 37,
+        "b": 10
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 36,
+        "b": 11
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "CLEAR",
+        "id": 12
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "CLEAR",
+        "id": 9
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "CLEAR",
+        "id": 6
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 35,
+        "b": 7
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 34,
+        "b": 8
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 33,
+        "b": 4
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 32,
+        "b": 5
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 30
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 30,
+        "o": 29
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "CLEAR",
+        "id": 3
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 2
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 2,
+        "o": 1
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "FINAL_SCORE",
+        "finalScore": 8260,
+        "finalDisplayedScore": 6500,
+        "remainingTileBonus": 0,
+        "solveBonus": 500,
+        "timeBonus": 1260,
+        "totalBonuses": 1760,
+        "remainingTiles": 0
+      }
+    }
+  ],
+  "meta": {
+    "source_filename": "puzzle_configuration (10).json",
+    "hints": {},
+    "sent_from": "game.html",
+    "sent_at_iso": "2025-10-18T16:10:14.110Z"
+  }
+}

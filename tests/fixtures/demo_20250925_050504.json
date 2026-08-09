@@ -1,0 +1,446 @@
+{
+  "events": [
+    {
+      "action": "Game Initialized",
+      "details": {
+        "initialTileData": {
+          "1": "emoji8",
+          "2": "emoji11",
+          "3": "emoji8",
+          "4": "emoji5",
+          "5": "emoji4",
+          "6": "emoji14",
+          "7": "emoji14",
+          "8": "emoji1",
+          "9": "emoji10",
+          "10": "emoji10",
+          "11": "emoji3",
+          "12": "emoji5",
+          "13": "emoji17",
+          "14": "emoji10",
+          "15": "emoji1",
+          "16": "emoji17",
+          "17": "emoji14",
+          "18": "emoji2",
+          "19": "emoji11",
+          "20": "emoji13",
+          "21": "emoji4",
+          "22": "emoji14",
+          "23": "emoji8",
+          "24": "emoji16",
+          "25": "emoji16",
+          "26": "emoji17",
+          "27": "emoji10",
+          "28": "emoji5",
+          "29": "emoji5",
+          "30": "emoji11",
+          "31": "emoji7",
+          "32": "emoji17",
+          "33": "emoji16",
+          "34": "emoji2",
+          "35": "emoji1",
+          "36": "emoji12",
+          "37": "emoji13",
+          "38": "emoji7",
+          "39": "emoji4",
+          "40": "emoji16",
+          "41": "emoji7",
+          "42": "emoji2",
+          "43": "emoji4",
+          "44": "emoji11",
+          "45": "emoji3",
+          "46": "emoji2",
+          "47": "emoji7",
+          "48": "emoji13",
+          "49": "emoji13",
+          "50": "emoji1",
+          "51": "emoji12",
+          "52": "emoji8"
+        }
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 52
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "RESET"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 40,
+        "b": 26
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 39,
+        "b": 28
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 52,
+        "o": 38
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 37,
+        "b": 22
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "CLEAR",
+        "id": 36
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 35
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 35,
+        "o": 34
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 33
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 33,
+        "o": 32
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 31,
+        "b": 23
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 24,
+        "b": 16
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 25
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 27,
+        "b": 19
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 20,
+        "b": 17
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 30,
+        "b": 14
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 29,
+        "b": 21
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 18,
+        "b": 15
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 25,
+        "o": 13
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "CLEAR",
+        "id": 11
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 43,
+        "b": 12
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 42,
+        "b": 8
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 46
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "DRAW"
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "CLEAR",
+        "id": 51
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 46,
+        "o": 50
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 49,
+        "b": 7
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "HOLD",
+        "id": 9
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 5,
+        "b": 4
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 10,
+        "b": 2
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 48,
+        "b": 6
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 47,
+        "b": 3
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "CLEAR",
+        "id": 45
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH_HOLD",
+        "h": 9,
+        "o": 44
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "MATCH",
+        "a": 41,
+        "b": 1
+      }
+    },
+    {
+      "action": "ACT",
+      "details": {
+        "type": "FINAL_SCORE",
+        "finalScore": 7410,
+        "finalDisplayedScore": 5650,
+        "remainingTileBonus": 0,
+        "solveBonus": 500,
+        "timeBonus": 1260,
+        "totalBonuses": 1760,
+        "remainingTiles": 0
+      }
+    }
+  ],
+  "meta": {
+    "source_filename": "PP20241013-1.json",
+    "hints": {},
+    "sent_from": "game.html",
+    "sent_at_iso": "2025-09-25T09:05:04.701Z"
+  }
+}
