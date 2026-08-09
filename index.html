@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Puzzle Pyramid AI Input</title>
+<style>
+:root{--tile-width:40px;--tile-height:60px;--tile-overlap:-30px;--tile-bg:#f5f2d8}
+*{box-sizing:border-box}body{margin:0;padding:16px 8px 28px;font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111;text-align:center}h1{margin:0 0 6px;font-size:clamp(26px,7vw,42px)}.version{margin-bottom:16px;color:#666}#pyramid{width:max-content;max-width:100%;margin:0 auto;padding-top:30px}.pyramid-row{display:flex;justify-content:center;margin:var(--tile-overlap) 0 0}.tile{position:relative;width:var(--tile-width);height:var(--tile-height);flex:0 0 var(--tile-width);background:var(--tile-bg);border-radius:10px;box-shadow:2px 2px 5px rgba(0,0,0,.3);background-repeat:no-repeat;background-position:center 7px;background-size:30px 30px}.inventory-wrap{width:100%;overflow-x:auto;margin-top:20px;padding-bottom:4px}.inventory{display:flex;justify-content:center;min-width:calc(24 * var(--tile-width));width:max-content;margin:0 auto}.inventory .tile:nth-child(3n){border-right:2px solid #111}.section-label{margin:18px 0 8px;font-size:18px;font-weight:700}.emoji-keyboard{display:grid;grid-template-columns:repeat(6,54px);gap:7px;justify-content:center}.emoji-key{width:54px;height:54px;border:0;border-radius:9px;background:#f5f2d8 center/38px 38px no-repeat;box-shadow:1px 2px 5px rgba(0,0,0,.28);cursor:pointer;touch-action:manipulation}.emoji-key:active,.emoji-key.active{transform:translateY(1px);outline:3px solid #2f80ed}.status{min-height:24px;margin:12px 0 0;color:#444;font-size:15px}.button-grid{display:grid;grid-template-columns:repeat(2,minmax(140px,180px));gap:10px;justify-content:center;margin-top:14px}.action-button{border:0;border-radius:7px;padding:11px 12px;color:#fff;background:#666;font-size:16px;font-weight:700;cursor:pointer}#playButton{background:#228b22}#solveButton{background:#1677b8}#clearButton{background:#aa2b2b}@media(max-width:470px){.emoji-keyboard{grid-template-columns:repeat(6,44px);gap:5px}.emoji-key{width:44px;height:48px;background-size:32px 32px}.button-grid{grid-template-columns:repeat(2,minmax(130px,1fr));padding:0 8px}}
+</style>
+</head>
+<body>
+<h1>Puzzle Pyramid AI</h1>
+<div class="version">JavaScript Solver v0.1 — mechanical conversion from Pyramid Solitaire v1.5.5</div>
+<div id="pyramid"></div>
+<div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
+<div class="section-label">Emoji Keyboard</div>
+<div class="emoji-keyboard" id="emojiKeyboard"></div>
+<div id="status" class="status">Next input: Tile 1 of 52</div>
+<div class="button-grid">
+<button id="deleteButton" class="action-button">Delete Last Input</button><button id="clearButton" class="action-button">Clear Board</button>
+<button id="playButton" class="action-button">Play Puzzle</button><button id="solveButton" class="action-button">Solve Puzzle</button>
+<button id="saveButton" class="action-button">Save Puzzle</button><button id="uploadButton" class="action-button">Upload Puzzle</button>
+</div>
+<input type="file" id="fileInput" hidden accept=".json,application/json">
+<script>
+'use strict';
+const VERSION='Puzzle Pyramid AI JS v0.1'; const TOTAL_TILES=52;
+const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
+let currentTile=1; let tileData={}; const statusElement=document.getElementById('status');
+function emojiPath(key){return key?`images/${key}.png`:''}
+function makeBoard(){let id=1;const root=document.getElementById('pyramid');for(let row=1;row<=7;row++){const r=document.createElement('div');r.className='pyramid-row';for(let c=0;c<row;c++){const t=document.createElement('div');t.className='tile';t.id=`tile${id++}`;r.appendChild(t)}root.appendChild(r)}const inv=document.getElementById('inventory');for(let i=29;i<=52;i++){const t=document.createElement('div');t.className='tile';t.id=`tile${i}`;inv.appendChild(t)}}
+function makeKeyboard(){const k=document.getElementById('emojiKeyboard');for(let i=1;i<=18;i++){const key=`emoji${i}`;const b=document.createElement('button');b.className='emoji-key';b.dataset.emoji=key;b.title=key;b.style.backgroundImage=`url('${emojiPath(key)}')`;b.addEventListener('click',()=>enterEmoji(key,b));k.appendChild(b)}}
+function normalizeEmoji(v){const x=String(v??'').trim().toLowerCase();return VALID_EMOJIS.has(x)?x:null}
+function setTileValue(id,key){const el=document.getElementById(`tile${id}`);if(el)el.style.backgroundImage=key?`url('${emojiPath(key)}')`:''}
+function updateStatus(message=''){if(message){statusElement.textContent=message;return}statusElement.textContent=currentTile<=TOTAL_TILES?`Next input: Tile ${currentTile} of ${TOTAL_TILES}`:'Board complete: all 52 tiles are filled.'}
+function recalc(){currentTile=1;while(currentTile<=52&&normalizeEmoji(tileData[currentTile]))currentTile++;updateStatus()}
+function enterEmoji(key,button){if(currentTile>52){updateStatus('All 52 tiles are already filled.');return}tileData[currentTile]=key;setTileValue(currentTile,key);currentTile++;updateStatus();document.querySelectorAll('.emoji-key.active').forEach(x=>x.classList.remove('active'));button.classList.add('active');setTimeout(()=>button.classList.remove('active'),140)}
+function boardHasData(){return Object.values(tileData).some(normalizeEmoji)}
+function openDestination(fileName,windowName){if(!boardHasData()){updateStatus('Enter at least one emoji first.');return}localStorage.setItem('tileData',JSON.stringify(tileData));localStorage.setItem('ppaiVersion',VERSION);const w=window.open(fileName,windowName);if(!w)location.href=fileName}
+document.getElementById('deleteButton').addEventListener('click',()=>{if(currentTile===1){updateStatus('Nothing to delete.');return}if(currentTile>52)currentTile=53;currentTile--;delete tileData[currentTile];setTileValue(currentTile,null);updateStatus()});
+document.getElementById('clearButton').addEventListener('click',()=>{tileData={};currentTile=1;for(let i=1;i<=52;i++)setTileValue(i,null);updateStatus('Board cleared. Next input: Tile 1 of 52')});
+document.getElementById('playButton').addEventListener('click',()=>openDestination('game.html','Puzzle Pyramid Game'));
+document.getElementById('solveButton').addEventListener('click',()=>openDestination('solver.html','Puzzle Pyramid Solver'));
+function ts(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`}
+document.getElementById('saveButton').addEventListener('click',()=>{if(!boardHasData()){updateStatus('There is no board data to save.');return}const payload={version:VERSION,saveType:'PUZZLE',savedAt:new Date().toISOString(),tileData};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`puzzle_pyramid_${ts()}.json`;a.click();URL.revokeObjectURL(a.href);updateStatus('Puzzle saved.')});
+document.getElementById('uploadButton').addEventListener('click',()=>document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result),src=p?.tileData||p,clean={};for(let i=1;i<=52;i++){const v=normalizeEmoji(src?.[i]);if(v)clean[i]=v}tileData=clean;for(let i=1;i<=52;i++)setTileValue(i,tileData[i]||null);recalc();updateStatus(`Puzzle loaded. ${statusElement.textContent}`)}catch(err){console.error(err);updateStatus('Could not load that JSON file.')}finally{e.target.value=''}};r.readAsText(f)});
+makeBoard();makeKeyboard();updateStatus();
+</script>
+</body></html>

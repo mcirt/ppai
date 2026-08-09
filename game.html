@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Puzzle Pyramid AI</title>
+<style>
+:root { --tile-w:40px; --tile-h:60px; --overlap:-30px; }
+* { box-sizing:border-box; }
+body { margin:0; padding:14px 8px 24px; font-family:Arial,sans-serif; background:#fff; color:#111; overflow-x:auto; }
+h1 { text-align:center; margin:0 0 4px; }
+.version { text-align:center; color:#666; font-size:12px; margin-bottom:8px; }
+#score { font:48px Georgia,serif; text-align:center; margin:0 0 -12px; position:relative; z-index:0; }
+#flash-points { min-height:22px; text-align:center; font-weight:700; }
+#pyramid { width:max-content; margin:0 auto; position:relative; z-index:1; }
+.pyramid-row { display:flex; justify-content:center; margin:var(--overlap) 0 0; }
+.pyramid-row:first-child { margin-top:0; }
+.tile,.holdtile {
+  width:var(--tile-w); height:var(--tile-h); margin:0; background:#f5f2d8; border-radius:10px;
+  box-shadow:2px 2px 5px rgba(0,0,0,.3); text-align:center; cursor:pointer; position:relative;
+  user-select:none; touch-action:none; border:1px solid rgba(0,0,0,.08);
+}
+.tile .emoji-face,.holdtile .emoji-face { position:absolute; top:5px; left:5px; width:30px; height:30px; background-position:center; background-repeat:no-repeat; background-size:contain; pointer-events:none; }
+.tile.hidden-tile { visibility:hidden; pointer-events:none; }
+.tile.selected,.holdtile.selected { outline:3px solid #ffd400; outline-offset:-2px; }
+.tile.valid-target,.holdtile.valid-target { outline:3px solid #2eaf55; outline-offset:-2px; }
+.tile.invalid-target,.holdtile.invalid-target { outline:3px solid #d34b4b; outline-offset:-2px; }
+.inventory { display:flex; justify-content:center; margin:20px auto 0; position:relative; width:max-content; }
+#tiley,#tilez { margin-left:-15px; }
+.controls { display:flex; justify-content:center; align-items:flex-start; gap:24px; margin-top:18px; }
+.controls button,.download-row button { padding:10px 16px; border-radius:7px; border:0; font-weight:700; cursor:pointer; }
+#draw-button { background:#1769aa; color:#fff; }
+#undo-button { background:#555; color:#fff; }
+#tileh { background:transparent; border:2px dashed #777; box-shadow:none; }
+#tileh.occupied { background:#f5f2d8; border:1px solid rgba(0,0,0,.08); box-shadow:2px 2px 5px rgba(0,0,0,.3); }
+.holdtext { margin-top:20px; font-size:13px; color:#555; }
+.download-row { display:flex; justify-content:center; gap:10px; margin-top:12px; }
+.status { text-align:center; min-height:22px; margin-top:8px; color:#444; }
+.log-panel { max-width:760px; margin:16px auto 0; border:1px solid #ccc; border-radius:8px; padding:10px 14px; }
+.log-panel h2 { margin:0 0 8px; font-size:18px; }
+#moveLog { margin:0; padding-left:24px; max-height:220px; overflow:auto; }
+#moveLog li { margin:4px 0; }
+.drag-ghost { position:fixed; pointer-events:none; z-index:9999; opacity:.9; transform:translate(-50%,-50%) scale(1.08); }
+.tile.drag-origin-placeholder,.holdtile.drag-origin-placeholder{background:rgba(255,255,255,.06)!important;border:2px dashed #8a8a8a!important;box-shadow:none!important;outline:none!important;color:transparent!important}
+.tile.drag-origin-placeholder .emoji-face,.holdtile.drag-origin-placeholder .emoji-face{visibility:hidden!important}
+.tile.king-pop,.holdtile.king-pop{animation:kingPop 620ms ease-out both;z-index:15}
+.king-burst{position:fixed;z-index:10000;width:10px;height:10px;pointer-events:none;transform:translate(-50%,-50%)}
+.king-burst::before{content:'';position:absolute;left:50%;top:50%;width:18px;height:18px;border:4px solid #ffd400;border-radius:50%;transform:translate(-50%,-50%);animation:kingRing 620ms ease-out both}
+.king-burst span{position:absolute;left:50%;top:50%;width:7px;height:7px;border-radius:50%;background:#ffb000;box-shadow:0 0 7px rgba(255,176,0,.9);transform:translate(-50%,-50%);animation:kingSpark 620ms ease-out both}
+@keyframes kingPop{0%{transform:scale(1);filter:brightness(1)}32%{transform:scale(1.22);filter:brightness(1.55)}62%{transform:scale(.9);filter:brightness(1.2)}100%{transform:scale(1);filter:brightness(1)}}
+@keyframes kingRing{0%{opacity:1;transform:translate(-50%,-50%) scale(.35)}100%{opacity:0;transform:translate(-50%,-50%) scale(4.4)}}
+@keyframes kingSpark{0%{opacity:1;transform:translate(-50%,-50%) translate(0,0) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) translate(var(--dx),var(--dy)) scale(.25)}}
+.game-over { color:#238636; font-weight:700; }
+@media(max-width:520px){ #score{font-size:42px;} .controls{gap:14px;} }
+</style>
+</head>
+<body>
+<h1>Puzzle Pyramid AI</h1>
+<div class="version">Puzzle Pyramid AI JS v0.1</div>
+<div id="score">Score: 0</div>
+<div id="flash-points"></div>
+<div id="pyramid"></div>
+<div class="inventory">
+  <div class="tile hidden-tile" id="tilex" data-zone="inventory"><span class="emoji-face"></span></div>
+  <div class="tile hidden-tile" id="tiley" data-zone="inventory"><span class="emoji-face"></span></div>
+  <div class="tile hidden-tile" id="tilez" data-zone="inventory"><span class="emoji-face"></span></div>
+</div>
+<div class="controls">
+  <button id="draw-button">Draw</button>
+  <button id="undo-button">Undo</button>
+  <div class="holdtile" id="tileh" data-zone="hold"><span class="emoji-face"></span><div class="holdtext">Hold</div></div>
+</div>
+<div class="download-row">
+  <button id="download-button">Download Game Log</button>
+</div>
+<div id="status" class="status">Click two tiles, or drag one playable tile onto another.</div>
+<div class="log-panel">
+  <h2>Move Log</h2>
+  <ol id="moveLog"></ol>
+</div>
+<script>
+'use strict';
+const VERSION='Puzzle Pyramid AI JS v0.1';
+const EMOJI_PAIRS={
+  emoji1:'emoji2',emoji2:'emoji1',
+  emoji4:'emoji5',emoji5:'emoji4',
+  emoji7:'emoji8',emoji8:'emoji7',
+  emoji10:'emoji11',emoji11:'emoji10',
+  emoji13:'emoji14',emoji14:'emoji13',
+  emoji16:'emoji17',emoji17:'emoji16'
+};
+const UNMATCHED=new Set(['emoji3','emoji6','emoji9','emoji12','emoji15','emoji18']);
+function emojiImagePath(emoji){ return emoji ? `images/${emoji}.png` : ''; }
+function applyEmojiFace(el,emoji){
+  if(!el) return;
+  const face=el.querySelector?.('.emoji-face');
+  if(face) face.style.backgroundImage=emoji?`url('${emojiImagePath(emoji)}')`:'';
+  el.style.backgroundColor=emoji?'#f5f2d8':'';
+}
+const BLOCKERS={1:[2,3],2:[4,5],3:[5,6],4:[7,8],5:[8,9],6:[9,10],7:[11,12],8:[12,13],9:[13,14],10:[14,15],11:[16,17],12:[17,18],13:[18,19],14:[19,20],15:[20,21],16:[22,23],17:[23,24],18:[24,25],19:[25,26],20:[26,27],21:[27,28]};
+const SOLVE_BONUS=500;
+const TIME_BONUS=1260;
+const PERFECT_SCORE=8260;
+
+let state={ tileData:{}, stockQueue:[], inPlay:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, completionApplied:false, solveBonus:0, timeBonus:0 };
+let history=[];
+let selected=null;
+let pointerSession=null;
+
+function makePyramid(){
+  const root=document.getElementById('pyramid'); let id=1;
+  for(let row=1;row<=7;row++){
+    const rowEl=document.createElement('div'); rowEl.className='pyramid-row';
+    for(let c=0;c<row;c++){
+      const tile=document.createElement('div'); tile.className='tile'; tile.id=`tile${id}`; tile.dataset.zone='pyramid'; tile.dataset.tileId=String(id);
+      const face=document.createElement('span'); face.className='emoji-face'; tile.appendChild(face); rowEl.appendChild(tile); id++;
+    }
+    root.appendChild(rowEl);
+  }
+}
+function loadInitialState(){
+  const raw=localStorage.getItem('pyramidSolitaireTileData')||localStorage.getItem('tileData');
+  if(!raw){ setStatus('No board data found. Return to index.html and load a puzzle.'); return; }
+  const data=JSON.parse(raw); state.tileData={}; for(let i=1;i<=52;i++) state.tileData[i]=data[i]??data[String(i)]??null;
+  state.stockQueue=[]; for(let i=29;i<=52;i++) if(state.tileData[i]) state.stockQueue.push(i);
+  renderAll(); bindPointerEvents();
+}
+function cloneState(){ return JSON.parse(JSON.stringify(state)); }
+function saveSnapshot(){ history.push(cloneState()); }
+function undo(){
+  if(!history.length){ setStatus('Nothing to undo.'); return; }
+  state=history.pop(); selected=null; clearHighlights(); renderAll(); setStatus('Previous move restored, including score and streak.');
+}
+function emojiOf(ref){
+  if(ref.zone==='hold') return state.hold?.emoji||null;
+  if(ref.zone==='inventory') return state.tileData[ref.tileId]||null;
+  return state.tileData[ref.tileId]||null;
+}
+function isPyramidPlayable(id){ const blockers=BLOCKERS[id]||[]; return blockers.every(b=>state.tileData[b]===null); }
+function currentInventoryIds(){ return [...state.inPlay].sort((a,b)=>b-a).slice(0,3); }
+function currentZId(){ return currentInventoryIds()[0]??null; }
+function isPlayable(ref){
+  if(!ref||state.gameOver) return false;
+  if(ref.zone==='hold') return !!state.hold;
+  if(ref.zone==='inventory') return Number(ref.tileId)===currentZId();
+  return !!state.tileData[ref.tileId] && isPyramidPlayable(Number(ref.tileId));
+}
+function isPair(a,b){ const ea=emojiOf(a), eb=emojiOf(b); return !!ea&&!!eb&&EMOJI_PAIRS[ea]===eb; }
+function pointsForNextStreak(){ return Math.min(state.streak+1,5)*50; }
+function awardScoringAction(){ state.streak++; const pts=Math.min(state.streak,5)*50; state.score+=pts; flashPoints(`+${pts}`); return pts; }
+function removeRef(ref){
+  if(ref.zone==='hold'){ state.hold=null; return; }
+  const id=Number(ref.tileId); state.tileData[id]=null;
+  if(id>=29){ const idx=state.inPlay.indexOf(id); if(idx>=0) state.inPlay.splice(idx,1); const s=state.stockQueue.indexOf(id); if(s>=0) state.stockQueue.splice(s,1); }
+}
+function describe(ref){
+  if(ref.zone==='hold') return `Hold (${emojiOf(ref)})`;
+  if(ref.zone==='inventory') return `Inventory ${ref.tileId} (${emojiOf(ref)})`;
+  return `Pyramid ${ref.tileId} (${emojiOf(ref)})`;
+}
+function commitLog(type,summary,details={}){
+  state.moveNumber++;
+  const entry={move:state.moveNumber,type,summary,score:state.score,streak:state.streak,timestamp:new Date().toISOString(),details};
+  state.logs.push(entry); renderLog();
+}
+function inventoryUsedCount(s=state){ let n=0; for(let i=29;i<=52;i++) if(s.tileData[i]===null)n++; return n; }
+function applyCompletionBonuses(reason='Puzzle complete'){
+  if(state.completionApplied) return;
+  state.completionApplied=true; state.solveBonus=SOLVE_BONUS; state.timeBonus=TIME_BONUS;
+  state.score+=SOLVE_BONUS+TIME_BONUS;
+  flashPoints(`+${(SOLVE_BONUS+TIME_BONUS).toLocaleString()} bonuses`);
+  commitLog('COMPLETE',`${reason}. +${SOLVE_BONUS} completion bonus +${TIME_BONUS} time bonus. Final score: ${state.score}.`,{solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,inventoryUsed:inventoryUsedCount(state),perfectScore:state.score===PERFECT_SCORE});
+}
+function centerOf(el){ const r=el.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; }
+async function animateUnmatchedBurst(ref){
+  const el=elementForRef(ref); if(!el) return;
+  const at=centerOf(el), burstMs=620;
+  el.classList.add('king-pop');
+  const burst=document.createElement('div'); burst.className='king-burst'; burst.style.left=`${at.x}px`; burst.style.top=`${at.y}px`;
+  for(let i=0;i<10;i++){
+    const spark=document.createElement('span'); const angle=(Math.PI*2*i/10)-(Math.PI/2); const distance=32+(i%2)*12;
+    spark.style.setProperty('--dx',`${Math.cos(angle)*distance}px`); spark.style.setProperty('--dy',`${Math.sin(angle)*distance}px`); burst.appendChild(spark);
+  }
+  document.body.appendChild(burst); await new Promise(r=>setTimeout(r,burstMs)); burst.remove(); el.classList.remove('king-pop');
+}
+async function clearUnmatched(ref){
+  if(!isPlayable(ref)||!UNMATCHED.has(emojiOf(ref))){ setStatus('That unmatched tile is not currently playable.'); return false; }
+  setStatus(`${describe(ref)} clearing…`);
+  await animateUnmatchedBurst(ref);
+  if(!isPlayable(ref)||!UNMATCHED.has(emojiOf(ref))) return false;
+  saveSnapshot(); const label=describe(ref); removeRef(ref); const pts=awardScoringAction(); commitLog('CLEAR',`Removed ${label}; +${pts} points.`); finishAction(ref); return true;
+}
+function matchRefs(a,b){
+  if(!isPlayable(a)||!isPlayable(b)){ setStatus('Both tiles must be legally playable.'); return false; }
+  if(!isPair(a,b)){ setStatus('Those tiles are not complementary.'); return false; }
+  saveSnapshot();
+  const da=describe(a), db=describe(b);
+  const holdRef=a.zone==='hold'?a:(b.zone==='hold'?b:null);
+  const otherRef=holdRef?(a.zone==='hold'?b:a):null;
+  const heldSourceId=holdRef?state.hold?.sourceId:null;
+  removeRef(a); removeRef(b); const pts=awardScoringAction();
+  if(holdRef) commitLog('MATCH_HOLD',`Matched ${da} with ${db}; +${pts} points.`,{h:Number(heldSourceId),o:Number(otherRef.tileId)});
+  else commitLog('MATCH',`Matched ${da} with ${db}; +${pts} points.`,{a:Number(a.tileId),b:Number(b.tileId)});
+  finishAction(a,b); return true;
+}
+function moveToHold(ref){
+  if(state.hold){ setStatus('Hold already contains a tile.'); return false; }
+  if(!isPlayable(ref)){ setStatus('Only a playable tile can be moved to Hold.'); return false; }
+  if(UNMATCHED.has(emojiOf(ref))){ setStatus('Unmatched tiles clear automatically and cannot be moved to Hold.'); return false; }
+  saveSnapshot(); const emoji=emojiOf(ref), source=describe(ref), sourceId=ref.tileId; removeRef(ref); state.hold={emoji,sourceId,sourceZone:ref.zone};
+  commitLog('HOLD',`Moved ${source} to Hold.`,{emoji});
+  if(Number(sourceId)===1){ state.gameOver=true; applyCompletionBonuses('Tile 1 moved to Hold. Game complete'); }
+  finishAction(ref); return true;
+}
+function draw(){
+  if(state.gameOver) return;
+  if(state.stockQueue.length===0){ resetStock(); return; }
+  saveSnapshot(); const drawn=state.stockQueue.splice(0,Math.min(3,state.stockQueue.length)); state.inPlay.push(...drawn); state.streak=0;
+  commitLog('DRAW',`Drew ${drawn.map(id=>`${id} (${state.tileData[id]})`).join(', ')}. Streak reset.`); finishAction();
+}
+function resetStock(){
+  if(!state.inPlay.length){ setStatus('No inventory tiles remain.'); return; }
+  saveSnapshot(); state.stockQueue=[...state.inPlay].sort((a,b)=>a-b); state.inPlay=[]; state.streak=0; const before=state.score; state.score=Math.max(0,state.score-50); const deduction=before-state.score;
+  if(deduction) flashPoints(`-${deduction}`,true); commitLog('RESET',`Reset inventory; -${deduction} points. Streak reset.`); finishAction();
+}
+function finishAction(...refs){
+  selected=null; clearHighlights();
+  if(refs.some(r=>r&&Number(r.tileId)===1)){ state.gameOver=true; applyCompletionBonuses('Tile 1 cleared. Game complete'); }
+  renderAll();
+  if(state.gameOver) setStatus('Game complete!',true); else setStatus('Move completed.');
+}
+function activate(ref){
+  if(!isPlayable(ref)){ setStatus('That tile is blocked or not the playable inventory tile.'); return; }
+  if(UNMATCHED.has(emojiOf(ref))){ clearUnmatched(ref); return; }
+  if(selected===null){ selected=ref; renderSelection(); setStatus(`${describe(ref)} selected.`); return; }
+  if(sameRef(selected,ref)){ selected=null; renderSelection(); setStatus('Selection cleared.'); return; }
+  const first=selected; selected=null; matchRefs(first,ref); renderSelection();
+}
+function sameRef(a,b){ return a&&b&&a.zone===b.zone&&String(a.tileId??'h')===String(b.tileId??'h'); }
+function refFromElement(el){
+  const tile=el?.closest?.('.tile,.holdtile'); if(!tile) return null;
+  if(tile.id==='tileh') return {zone:'hold',tileId:'h'};
+  if(tile.id==='tilez') return {zone:'inventory',tileId:currentZId()};
+  if(tile.id==='tilex'||tile.id==='tiley') return {zone:'inventory',tileId:Number(tile.dataset.tileId)};
+  return {zone:'pyramid',tileId:Number(tile.dataset.tileId)};
+}
+function renderAll(){
+  for(let i=1;i<=28;i++){
+    const el=document.getElementById(`tile${i}`), emoji=state.tileData[i]; el.classList.toggle('hidden-tile',!emoji); applyEmojiFace(el,emoji);
+  }
+  renderInventory(); renderHold(); renderScore(); renderLog(); renderSelection();
+  document.getElementById('draw-button').textContent=state.stockQueue.length?'Draw':'Reset';
+}
+function renderInventory(){
+  const ids=currentInventoryIds(); const slots=[document.getElementById('tilez'),document.getElementById('tiley'),document.getElementById('tilex')];
+  slots.forEach((el,index)=>{ const id=ids[index]; const emoji=id?state.tileData[id]:''; el.dataset.tileId=id??''; el.classList.toggle('hidden-tile',!id); applyEmojiFace(el,emoji); });
+}
+function renderHold(){
+  const el=document.getElementById('tileh'); const emoji=state.hold?.emoji||''; el.classList.toggle('occupied',!!emoji); el.querySelector('.holdtext').style.visibility=emoji?'hidden':'visible'; if(emoji) applyEmojiFace(el,emoji); else { applyEmojiFace(el,null); el.style.backgroundColor='transparent'; }
+}
+function renderScore(){ const suffix=state.completionApplied?` (includes +${state.solveBonus} solve +${state.timeBonus} time)`:''; document.getElementById('score').textContent=`Score: ${state.score}${suffix}`; }
+function renderLog(){ const ol=document.getElementById('moveLog'); ol.innerHTML=''; state.logs.forEach(e=>{const li=document.createElement('li'); li.textContent=e.summary; ol.appendChild(li);}); ol.scrollTop=ol.scrollHeight; }
+function renderSelection(){ clearHighlights(); if(!selected) return; const el=elementForRef(selected); if(el) el.classList.add('selected'); }
+function clearHighlights(){ document.querySelectorAll('.selected,.valid-target,.invalid-target').forEach(el=>el.classList.remove('selected','valid-target','invalid-target')); }
+function elementForRef(ref){ if(ref.zone==='hold') return document.getElementById('tileh'); if(ref.zone==='inventory') return Number(ref.tileId)===currentZId()?document.getElementById('tilez'):null; return document.getElementById(`tile${ref.tileId}`); }
+function setStatus(text,complete=false){ const el=document.getElementById('status'); el.textContent=text; el.classList.toggle('game-over',complete); }
+function flashPoints(text,negative=false){ const el=document.getElementById('flash-points'); el.textContent=text; el.style.color=negative?'#b42318':'#238636'; clearTimeout(flashPoints.timer); flashPoints.timer=setTimeout(()=>el.textContent='',900); }
+
+function bindPointerEvents(){
+  document.addEventListener('pointerdown',e=>{
+    const ref=refFromElement(e.target);
+    if(!ref) return;
+
+    // Preserve the original Puzzle Pyramid workflow:
+    // select a playable tile, then tap the empty Hold slot.
+    if(ref.zone==='hold' && !state.hold){
+      if(selected){
+        e.preventDefault();
+        const source=selected;
+        selected=null;
+        moveToHold(source);
+      } else {
+        setStatus('Select a playable tile first, then tap Hold.');
+      }
+      return;
+    }
+
+    if(!isPlayable(ref)) return;
+    const sourceEl=elementForRef(ref);
+    pointerSession={id:e.pointerId,ref,startX:e.clientX,startY:e.clientY,dragging:false,ghost:null,sourceEl};
+    sourceEl.setPointerCapture?.(e.pointerId);
+  });
+  document.addEventListener('pointermove',e=>{
+    const p=pointerSession; if(!p||p.id!==e.pointerId) return;
+    const dist=Math.hypot(e.clientX-p.startX,e.clientY-p.startY);
+    if(!p.dragging&&dist>8){
+      p.dragging=true;
+      p.ghost=p.sourceEl.cloneNode(true); p.ghost.className='tile drag-ghost';
+      const at=centerOf(p.sourceEl); p.ghost.style.left=`${at.x}px`; p.ghost.style.top=`${at.y}px`;
+      document.body.appendChild(p.ghost);
+      p.sourceEl.classList.add('drag-origin-placeholder');
+    }
+    if(p.dragging){ p.ghost.style.left=`${e.clientX}px`; p.ghost.style.top=`${e.clientY}px`; highlightDropTarget(e.clientX,e.clientY,p.ref); e.preventDefault(); }
+  },{passive:false});
+  document.addEventListener('pointerup',e=>{
+    const p=pointerSession; if(!p||p.id!==e.pointerId) return; pointerSession=null;
+    if(p.ghost) p.ghost.remove();
+    p.sourceEl?.classList.remove('drag-origin-placeholder');
+    clearHighlights();
+    if(!p.dragging){ activate(p.ref); return; }
+    const target=refAtPoint(e.clientX,e.clientY);
+    if(!target||sameRef(p.ref,target)){ setStatus('Tile returned to its original position.'); return; }
+    if(target.zone==='hold'&&!state.hold){ moveToHold(p.ref); return; }
+    matchRefs(p.ref,target);
+  });
+  document.addEventListener('pointercancel',()=>{
+    if(pointerSession?.ghost) pointerSession.ghost.remove();
+    pointerSession?.sourceEl?.classList.remove('drag-origin-placeholder');
+    pointerSession=null; clearHighlights();
+  });
+}
+function refAtPoint(x,y){ const el=document.elementFromPoint(x,y); return refFromElement(el); }
+function highlightDropTarget(x,y,source){
+  clearHighlights(); const src=elementForRef(source); if(src) src.classList.add('selected'); const target=refAtPoint(x,y); if(!target||sameRef(source,target)) return;
+  const el=elementForRef(target); if(!el) return;
+  const valid=(target.zone==='hold'&&!state.hold)|| (isPlayable(target)&&isPair(source,target)); el.classList.add(valid?'valid-target':'invalid-target');
+}
+function localTimestampForFilename(){
+  const d=new Date(), pad=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+function downloadLog(){
+  const payload={version:VERSION,playerType:'HUMAN',logType:'GAMEPLAY',savedAt:new Date().toISOString(),finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_game_log_HUMAN_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+}
+
+makePyramid(); loadInitialState();
+document.getElementById('draw-button').addEventListener('click',draw);
+document.getElementById('undo-button').addEventListener('click',undo);
+document.getElementById('download-button').addEventListener('click',downloadLog);
+</script>
+</body>
+</html>

@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Puzzle Pyramid Solver</title>
+<style>
+:root { --tile-w:40px; --tile-h:60px; --overlap:-30px; }
+* { box-sizing:border-box; }
+body { margin:0; padding:14px 8px 24px; font-family:Arial,sans-serif; background:#fff; color:#111; overflow-x:auto; }
+h1 { text-align:center; margin:0 0 4px; }
+.version { text-align:center; color:#666; font-size:12px; margin-bottom:8px; }
+#score { font:48px Georgia,serif; text-align:center; margin:0 0 -12px; position:relative; z-index:0; }
+#flash-points { min-height:22px; text-align:center; font-weight:700; }
+#pyramid { width:max-content; margin:0 auto; position:relative; z-index:1; }
+.pyramid-row { display:flex; justify-content:center; margin:var(--overlap) 0 0; }
+.pyramid-row:first-child { margin-top:0; }
+.tile,.holdtile {
+  width:var(--tile-w); height:var(--tile-h); margin:0; background:#f5f2d8; border-radius:10px;
+  box-shadow:2px 2px 5px rgba(0,0,0,.3); text-align:center; cursor:pointer; position:relative;
+  user-select:none; touch-action:none; border:1px solid rgba(0,0,0,.08);
+}
+.tile .emoji-face,.holdtile .emoji-face { position:absolute; top:5px; left:5px; width:30px; height:30px; background-position:center; background-repeat:no-repeat; background-size:contain; pointer-events:none; }
+.tile.hidden-tile { visibility:hidden; pointer-events:none; }
+.tile.selected,.holdtile.selected { outline:3px solid #ffd400; outline-offset:-2px; }
+.tile.valid-target,.holdtile.valid-target { outline:3px solid #2eaf55; outline-offset:-2px; }
+.tile.invalid-target,.holdtile.invalid-target { outline:3px solid #d34b4b; outline-offset:-2px; }
+.tile.solver-play,.holdtile.solver-play { outline:3px solid #2eaf55; outline-offset:-2px; box-shadow:0 0 0 2px rgba(46,175,85,.18),2px 2px 5px rgba(0,0,0,.3); }
+.inventory { display:flex; justify-content:center; margin:20px auto 0; position:relative; width:max-content; }
+#tiley,#tilez { margin-left:-15px; }
+.controls { display:flex; justify-content:center; align-items:flex-start; gap:24px; margin-top:18px; }
+.controls button,.download-row button { padding:10px 16px; border-radius:7px; border:0; font-weight:700; cursor:pointer; }
+#draw-button { background:#1769aa; color:#fff; transition:background .12s,transform .12s,box-shadow .12s; }
+#draw-button.solver-draw-flash { background:#ffd400; color:#111; transform:scale(1.08); box-shadow:0 0 0 4px rgba(255,212,0,.28); }
+#draw-button.solver-reset-flash { background:#ff8a00; color:#111; transform:scale(1.08); box-shadow:0 0 0 4px rgba(255,138,0,.30); }
+.draw-counter.reset-sign{color:#b34100;letter-spacing:.5px;}
+.draw-control{display:flex;flex-direction:column;align-items:center;gap:3px}.draw-counter{height:20px;font-weight:800;font-size:15px;line-height:20px;color:#111;visibility:hidden}.draw-counter.visible{visibility:visible}
+#undo-button { background:#555; color:#fff; }
+#tileh { background:transparent; border:2px dashed #777; box-shadow:none; }
+#tileh.occupied { background:#f5f2d8; border:1px solid rgba(0,0,0,.08); box-shadow:2px 2px 5px rgba(0,0,0,.3); }
+.holdtext { margin-top:20px; font-size:13px; color:#555; }
+.download-row { display:flex; justify-content:center; gap:10px; margin-top:12px; }
+.status { text-align:center; min-height:22px; margin-top:8px; color:#444; }
+.log-panel { max-width:760px; margin:16px auto 0; border:1px solid #ccc; border-radius:8px; padding:10px 14px; }
+.log-panel h2 { margin:0 0 8px; font-size:18px; }
+#moveLog { margin:0; padding-left:24px; max-height:220px; overflow:auto; }
+#moveLog li { margin:4px 0; }
+.drag-ghost { position:fixed; pointer-events:none; z-index:9999; opacity:.9; transform:translate(-50%,-50%) scale(1.08); }
+.game-over { color:#238636; font-weight:700; }
+.solver-controls{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:14px auto 0}.solver-controls button{padding:10px 14px;border:0;border-radius:7px;font-weight:700;cursor:pointer}.solver-note{text-align:center;color:#666;font-size:13px;margin-top:8px}
+.thought-panel{max-width:760px;margin:14px auto 0;border:1px solid #bbb;border-radius:8px;padding:10px 12px;background:#fafafa}.thought-panel h2{font-size:18px;margin:0 0 6px}.thought-summary{font-size:13px;color:#555;margin-bottom:8px}.candidate-table{width:100%;border-collapse:collapse;font-size:13px}.candidate-table th,.candidate-table td{border-top:1px solid #ddd;padding:6px 5px;text-align:left;vertical-align:top}.candidate-table th:nth-child(2),.candidate-table td:nth-child(2){text-align:right;white-space:nowrap}.candidate-table tr.chosen{font-weight:700;background:#eef8ee}.strategy-metric{display:inline-block;margin-right:12px}
+.search-stats{max-width:760px;margin:14px auto 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.search-stat{border:1px solid #ccc;border-radius:8px;padding:8px;text-align:center;background:#fff}.search-stat strong{display:block;font-size:18px}.search-label{font-size:11px;color:#666}.optimality{max-width:760px;margin:8px auto 0;text-align:center;font-size:12px;color:#666}.plan-summary{max-width:760px;margin:12px auto 0;border:1px solid #aaa;border-radius:8px;padding:10px 12px;background:#f7fbff}.plan-summary h2{font-size:18px;margin:0 0 8px}.plan-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.plan-item{text-align:center;border:1px solid #d0d7de;border-radius:7px;padding:7px;background:#fff}.plan-item strong{display:block;font-size:18px}.plan-item span{font-size:11px;color:#666}.plan-status{margin-top:8px;font-size:13px;text-align:center}.plan-progress{margin-top:6px;font-size:12px;color:#555;text-align:center}
+.calculated-score{position:fixed;top:10px;left:10px;z-index:50;border:2px solid #1769aa;border-radius:9px;background:#fff;padding:7px 10px;box-shadow:0 2px 8px rgba(0,0,0,.16);text-align:center;min-width:132px}
+.calculated-score .label{display:block;font-size:10px;font-weight:800;letter-spacing:.4px;color:#555}
+.calculated-score strong{display:block;font:700 25px Georgia,serif;color:#1769aa;margin-top:2px}
+.speed-control{display:flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid #bbb;border-radius:7px;background:#fff;font-size:13px;font-weight:700}
+.speed-control select{font:inherit;padding:5px 7px;border:1px solid #aaa;border-radius:6px;background:#fff}
+.drag-ghost.solver-drag{transition:left var(--solver-drag-ms,650ms) ease-in-out,top var(--solver-drag-ms,650ms) ease-in-out,transform var(--solver-drag-ms,650ms) ease-in-out;opacity:.96}
+.tile.solver-origin-placeholder,.holdtile.solver-origin-placeholder{background:rgba(255,255,255,.06)!important;border:2px dashed #8a8a8a!important;box-shadow:none!important;outline:none!important;color:transparent!important}
+.tile.solver-origin-placeholder .emoji-face,.holdtile.solver-origin-placeholder .emoji-face{visibility:hidden!important}
+.tile.king-pop,.holdtile.king-pop{animation:kingPop var(--king-burst-ms,620ms) ease-out both;z-index:15}
+.king-burst{position:fixed;z-index:10000;width:10px;height:10px;pointer-events:none;transform:translate(-50%,-50%)}
+.king-burst::before{content:'';position:absolute;left:50%;top:50%;width:18px;height:18px;border:4px solid #ffd400;border-radius:50%;transform:translate(-50%,-50%);animation:kingRing var(--king-burst-ms,620ms) ease-out both}
+.king-burst span{position:absolute;left:50%;top:50%;width:7px;height:7px;border-radius:50%;background:#ffb000;box-shadow:0 0 7px rgba(255,176,0,.9);transform:translate(-50%,-50%);animation:kingSpark var(--king-burst-ms,620ms) ease-out both}
+@keyframes kingPop{0%{transform:scale(1);filter:brightness(1)}32%{transform:scale(1.22);filter:brightness(1.55)}62%{transform:scale(.9);filter:brightness(1.2)}100%{transform:scale(1);filter:brightness(1)}}
+@keyframes kingRing{0%{opacity:1;transform:translate(-50%,-50%) scale(.35)}100%{opacity:0;transform:translate(-50%,-50%) scale(4.4)}}
+@keyframes kingSpark{0%{opacity:1;transform:translate(-50%,-50%) translate(0,0) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) translate(var(--dx),var(--dy)) scale(.25)}}
+@media(max-width:620px){.calculated-score{position:static;width:max-content;margin:0 auto 8px}.search-stats,.plan-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+@media(max-width:520px){ #score{font-size:42px;} .controls{gap:14px;} }
+</style>
+</head>
+<body>
+<div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
+<h1>Puzzle Pyramid Solver</h1>
+<div class="version">Puzzle Pyramid AI JS v0.1</div>
+<div id="score">Score: 0</div>
+<div id="flash-points"></div>
+<div id="pyramid"></div>
+<div class="inventory">
+  <div class="tile hidden-tile" id="tilex" data-zone="inventory"><span class="emoji-face"></span></div>
+  <div class="tile hidden-tile" id="tiley" data-zone="inventory"><span class="emoji-face"></span></div>
+  <div class="tile hidden-tile" id="tilez" data-zone="inventory"><span class="emoji-face"></span></div>
+</div>
+<div class="controls">
+  <div class="draw-control"><div id="draw-counter" class="draw-counter" aria-live="polite">1/1</div><button id="draw-button">Draw</button></div>
+  <button id="undo-button">Undo</button>
+  <div class="holdtile" id="tileh" data-zone="hold"><span class="emoji-face"></span><div class="holdtext">Hold</div></div>
+</div>
+<div class="download-row">
+  <button id="download-button">Download Solver Log</button>
+</div>
+<div class="solver-controls">
+  <label class="speed-control">Playback <select id="playback-speed"><option value="520">Fast · 0.52 sec</option><option value="1000" selected>Normal · 1.0 sec</option><option value="1500">Slow · 1.5 sec</option></select></label>
+  <button id="backward-step-button">Backward Step</button>
+  <button id="start-solver-button">Start Solver</button>
+  <button id="pause-solver-button">Pause Solver</button>
+  <button id="forward-step-button">Forward Step</button>
+</div>
+<div class="solver-note">v1.5 first runs a dedicated 8260 Perfect Score Probe against the known setup family. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
+<div class="search-stats">
+  <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
+  <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
+  <div class="search-stat"><strong id="duplicateSkips">0</strong><span class="search-label">duplicate/worse states skipped</span></div>
+  <div class="search-stat"><strong id="deadBranches">0</strong><span class="search-label">dead branches found</span></div>
+</div>
+<div id="optimalityStatus" class="optimality">BEST FOUND mode — not an optimality proof.</div>
+<div class="plan-summary">
+  <h2>Full-Plan Search Summary</h2>
+  <div class="plan-grid">
+    <div class="plan-item"><strong id="planStates">0</strong><span>scenarios examined</span></div>
+    <div class="plan-item"><strong id="solutionsFound">0</strong><span>complete solutions found</span></div>
+    <div class="plan-item"><strong id="bestPlanScore">—</strong><span>best completed score</span></div>
+    <div class="plan-item"><strong id="bestImprovements">0</strong><span>best-score improvements</span></div>
+    <div class="plan-item"><strong id="bestPartialScore">—</strong><span>best partial score</span></div>
+    <div class="plan-item"><strong id="inventoryUsed">0/24</strong><span>inventory used now</span></div>
+    <div class="plan-item"><strong id="perfectCandidates">0</strong><span>8260 candidates found</span></div>
+    <div class="plan-item"><strong id="perfectPossible">YES</strong><span>8260 route still possible now</span></div>
+  </div>
+  <div id="planStatus" class="plan-status">No full-plan search run yet.</div>
+  <div id="planProgress" class="plan-progress"></div>
+</div>
+<div id="status" class="status">Use Start Solver, or step through one legal move at a time.</div>
+<div class="thought-panel">
+  <h2>Solver Decision Explorer</h2>
+  <div id="thoughtSummary" class="thought-summary">No decision evaluated yet.</div>
+  <table class="candidate-table">
+    <thead><tr><th>Candidate move</th><th>Rating</th><th>Why it matters</th></tr></thead>
+    <tbody id="candidateBody"><tr><td colspan="3">Press Forward Step or Start Solver.</td></tr></tbody>
+  </table>
+</div>
+<div class="log-panel">
+  <h2>Move Log</h2>
+  <ol id="moveLog"></ol>
+</div>
+<script>
+'use strict';
+const VERSION='Puzzle Pyramid AI JS v0.1';
+const EMOJI_PAIRS={
+  emoji1:'emoji2',emoji2:'emoji1',
+  emoji4:'emoji5',emoji5:'emoji4',
+  emoji7:'emoji8',emoji8:'emoji7',
+  emoji10:'emoji11',emoji11:'emoji10',
+  emoji13:'emoji14',emoji14:'emoji13',
+  emoji16:'emoji17',emoji17:'emoji16'
+};
+const UNMATCHED=new Set(['emoji3','emoji6','emoji9','emoji12','emoji15','emoji18']);
+function emojiImagePath(emoji){ return emoji ? `images/${emoji}.png` : ''; }
+function applyEmojiFace(el,emoji){
+  if(!el) return;
+  const face=el.querySelector?.('.emoji-face');
+  if(face) face.style.backgroundImage=emoji?`url('${emojiImagePath(emoji)}')`:'';
+  el.style.backgroundColor=emoji?'#f5f2d8':'';
+}
+const BLOCKERS={1:[2,3],2:[4,5],3:[5,6],4:[7,8],5:[8,9],6:[9,10],7:[11,12],8:[12,13],9:[13,14],10:[14,15],11:[16,17],12:[17,18],13:[18,19],14:[19,20],15:[20,21],16:[22,23],17:[23,24],18:[24,25],19:[25,26],20:[26,27],21:[27,28]};
+const SOLVE_BONUS=500;
+const TIME_BONUS=1260;
+const PERFECT_SCORE=8260;
+
+let state={ tileData:{}, stockQueue:[], inPlay:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, resetsUsed:0, completionApplied:false, solveBonus:0, timeBonus:0 };
+let history=[];
+let selected=null;
+let pointerSession=null;
+
+function makePyramid(){
+  const root=document.getElementById('pyramid'); let id=1;
+  for(let row=1;row<=7;row++){
+    const rowEl=document.createElement('div'); rowEl.className='pyramid-row';
+    for(let c=0;c<row;c++){
+      const tile=document.createElement('div'); tile.className='tile'; tile.id=`tile${id}`; tile.dataset.zone='pyramid'; tile.dataset.tileId=String(id);
+      const face=document.createElement('span'); face.className='emoji-face'; tile.appendChild(face); rowEl.appendChild(tile); id++;
+    }
+    root.appendChild(rowEl);
+  }
+}
+function loadInitialState(){
+  const raw=localStorage.getItem('pyramidSolitaireTileData')||localStorage.getItem('tileData');
+  if(!raw){ setStatus('No board data found. Return to index.html and load a puzzle.'); return; }
+  const data=JSON.parse(raw); state.tileData={}; for(let i=1;i<=52;i++) state.tileData[i]=data[i]??data[String(i)]??null;
+  state.stockQueue=[]; for(let i=29;i<=52;i++) if(state.tileData[i]) state.stockQueue.push(i);
+  renderAll(); bindPointerEvents();
+}
+function cloneState(){ return JSON.parse(JSON.stringify(state)); }
+function saveSnapshot(){ history.push(cloneState()); }
+function undo(){
+  if(!history.length){ setStatus('Nothing to undo.'); return; }
+  state=history.pop(); selected=null; clearHighlights(); renderAll(); setStatus('Previous move restored, including score and streak.');
+}
+function emojiOf(ref){
+  if(ref.zone==='hold') return state.hold?.emoji||null;
+  if(ref.zone==='inventory') return state.tileData[ref.tileId]||null;
+  return state.tileData[ref.tileId]||null;
+}
+function isPyramidPlayable(id){ const blockers=BLOCKERS[id]||[]; return blockers.every(b=>state.tileData[b]===null); }
+function currentInventoryIds(){ return [...state.inPlay].sort((a,b)=>b-a).slice(0,3); }
+function currentZId(){ return currentInventoryIds()[0]??null; }
+function isPlayable(ref){
+  if(!ref||state.gameOver) return false;
+  if(ref.zone==='hold') return !!state.hold;
+  if(ref.zone==='inventory') return Number(ref.tileId)===currentZId();
+  return !!state.tileData[ref.tileId] && isPyramidPlayable(Number(ref.tileId));
+}
+function isPair(a,b){ const ea=emojiOf(a), eb=emojiOf(b); return !!ea&&!!eb&&EMOJI_PAIRS[ea]===eb; }
+function pointsForNextStreak(){ return Math.min(state.streak+1,5)*50; }
+function awardScoringAction(){ state.streak++; const pts=Math.min(state.streak,5)*50; state.score+=pts; flashPoints(`+${pts}`); return pts; }
+function removeRef(ref){
+  if(ref.zone==='hold'){ state.hold=null; return; }
+  const id=Number(ref.tileId); state.tileData[id]=null;
+  if(id>=29){ const idx=state.inPlay.indexOf(id); if(idx>=0) state.inPlay.splice(idx,1); const s=state.stockQueue.indexOf(id); if(s>=0) state.stockQueue.splice(s,1); }
+}
+function describe(ref){
+  if(ref.zone==='hold') return `Hold (${emojiOf(ref)})`;
+  if(ref.zone==='inventory') return `Inventory ${ref.tileId} (${emojiOf(ref)})`;
+  return `Pyramid ${ref.tileId} (${emojiOf(ref)})`;
+}
+function commitLog(type,summary,details={}){
+  state.moveNumber++;
+  const enriched={...details};
+  if(pendingSolverMeta && type!=='COMPLETE') enriched.solverDecision=JSON.parse(JSON.stringify(pendingSolverMeta));
+  const entry={move:state.moveNumber,type,summary,score:state.score,streak:state.streak,timestamp:new Date().toISOString(),details:enriched};
+  state.logs.push(entry); renderLog();
+}
+function inventoryUsedCount(s=state){ let n=0; for(let i=29;i<=52;i++) if(s.tileData[i]===null)n++; return n; }
+function remainingPyramidCount(s=state){ let n=0; for(let i=1;i<=28;i++) if(s.tileData[i]!==null)n++; return n; }
+function streakScore(n){ if(n<=0)return 0; if(n===1)return 50; if(n===2)return 150; if(n===3)return 300; if(n===4)return 500; return 500+(n-4)*250; }
+function perfectRoutePossible(s=state){ if(s.gameOver)return s.score===PERFECT_SCORE&&inventoryUsedCount(s)===24; return s.score===streakScore(s.streak); }
+function applyCompletionBonuses(reason='Puzzle complete'){
+  if(state.completionApplied) return;
+  state.completionApplied=true; state.solveBonus=SOLVE_BONUS; state.timeBonus=TIME_BONUS;
+  state.score+=SOLVE_BONUS+TIME_BONUS;
+  flashPoints(`+${(SOLVE_BONUS+TIME_BONUS).toLocaleString()} bonuses`);
+  commitLog('COMPLETE',`${reason}. +${SOLVE_BONUS} completion bonus +${TIME_BONUS} time bonus. Final score: ${state.score}.`,{solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,inventoryUsed:inventoryUsedCount(state),perfectScore:state.score===PERFECT_SCORE});
+}
+function clearUnmatched(ref){
+  if(!isPlayable(ref)||!UNMATCHED.has(emojiOf(ref))){ setStatus('That unmatched tile is not currently playable.'); return false; }
+  saveSnapshot(); const label=describe(ref); removeRef(ref); const pts=awardScoringAction(); commitLog('CLEAR',`Removed ${label}; +${pts} points.`); finishAction(ref); return true;
+}
+function matchRefs(a,b){
+  if(!isPlayable(a)||!isPlayable(b)){ setStatus('Both tiles must be legally playable.'); return false; }
+  if(!isPair(a,b)){ setStatus('Those tiles are not complementary.'); return false; }
+  saveSnapshot(); const da=describe(a), db=describe(b); removeRef(a); removeRef(b); const pts=awardScoringAction(); commitLog('MATCH',`Matched ${da} with ${db}; +${pts} points.`); finishAction(a,b); return true;
+}
+function moveToHold(ref){
+  if(state.hold){ setStatus('Hold already contains a tile.'); return false; }
+  if(!isPlayable(ref)){ setStatus('Only a playable tile can be moved to Hold.'); return false; }
+  if(UNMATCHED.has(emojiOf(ref))){ setStatus('Unmatched tiles clear automatically and cannot be moved to Hold.'); return false; }
+  saveSnapshot(); const emoji=emojiOf(ref), source=describe(ref), sourceId=ref.tileId; removeRef(ref); state.hold={emoji,sourceId,sourceZone:ref.zone};
+  commitLog('HOLD',`Moved ${source} to Hold.`,{emoji});
+  if(Number(sourceId)===1){ state.gameOver=true; applyCompletionBonuses('Tile 1 moved to Hold. Game complete'); }
+  finishAction(ref); return true;
+}
+function draw(){
+  if(state.gameOver) return;
+  if(state.stockQueue.length===0){ resetStock(); return; }
+  saveSnapshot(); const drawn=state.stockQueue.splice(0,Math.min(3,state.stockQueue.length)); state.inPlay.push(...drawn); state.streak=0;
+  commitLog('DRAW',`Drew ${drawn.map(id=>`${id} (${state.tileData[id]})`).join(', ')}. Streak reset.`); finishAction();
+}
+function resetStock(){
+  if(!state.inPlay.length){ setStatus('No inventory tiles remain.'); return; }
+  saveSnapshot(); state.stockQueue=[...state.inPlay].sort((a,b)=>a-b); state.inPlay=[]; state.streak=0; state.resetsUsed=(state.resetsUsed||0)+1; const before=state.score; state.score=Math.max(0,state.score-50); const deduction=before-state.score;
+  if(deduction) flashPoints(`-${deduction}`,true); commitLog('RESET',`Reset inventory; -${deduction} points. Streak reset.`); finishAction();
+}
+function finishAction(...refs){
+  selected=null; clearHighlights();
+  if(refs.some(r=>r&&Number(r.tileId)===1)){ state.gameOver=true; applyCompletionBonuses('Tile 1 cleared. Game complete'); }
+  renderAll();
+  if(state.gameOver) setStatus('Game complete!',true); else setStatus('Move completed.');
+}
+function activate(ref){
+  if(!isPlayable(ref)){ setStatus('That tile is blocked or not the playable inventory tile.'); return; }
+  if(UNMATCHED.has(emojiOf(ref))){ clearUnmatched(ref); return; }
+  if(selected===null){ selected=ref; renderSelection(); setStatus(`${describe(ref)} selected.`); return; }
+  if(sameRef(selected,ref)){ selected=null; renderSelection(); setStatus('Selection cleared.'); return; }
+  const first=selected; selected=null; matchRefs(first,ref); renderSelection();
+}
+function sameRef(a,b){ return a&&b&&a.zone===b.zone&&String(a.tileId??'h')===String(b.tileId??'h'); }
+function refFromElement(el){
+  const tile=el?.closest?.('.tile,.holdtile'); if(!tile) return null;
+  if(tile.id==='tileh') return {zone:'hold',tileId:'h'};
+  if(tile.id==='tilez') return {zone:'inventory',tileId:currentZId()};
+  if(tile.id==='tilex'||tile.id==='tiley') return {zone:'inventory',tileId:Number(tile.dataset.tileId)};
+  return {zone:'pyramid',tileId:Number(tile.dataset.tileId)};
+}
+function renderAll(){
+  for(let i=1;i<=28;i++){
+    const el=document.getElementById(`tile${i}`), emoji=state.tileData[i]; el.classList.toggle('hidden-tile',!emoji); applyEmojiFace(el,emoji);
+  }
+  renderInventory(); renderHold(); renderScore(); renderLog(); renderSelection();
+  document.getElementById('draw-button').textContent=state.stockQueue.length?'Draw':'Reset';
+  const invMetric=document.getElementById('inventoryUsed'); if(invMetric)invMetric.textContent=`${inventoryUsedCount(state)}/24`;
+  const perfectMetric=document.getElementById('perfectPossible'); if(perfectMetric)perfectMetric.textContent=perfectRoutePossible(state)?'YES':'NO';
+}
+function renderInventory(){
+  const ids=currentInventoryIds(); const slots=[document.getElementById('tilez'),document.getElementById('tiley'),document.getElementById('tilex')];
+  slots.forEach((el,index)=>{ const id=ids[index]; const emoji=id?state.tileData[id]:''; el.dataset.tileId=id??''; el.classList.toggle('hidden-tile',!id); applyEmojiFace(el,emoji); });
+}
+function renderHold(){
+  const el=document.getElementById('tileh'); const emoji=state.hold?.emoji||''; el.classList.toggle('occupied',!!emoji); el.querySelector('.holdtext').style.visibility=emoji?'hidden':'visible'; if(emoji) applyEmojiFace(el,emoji); else { applyEmojiFace(el,null); el.style.backgroundColor='transparent'; }
+}
+function renderScore(){ const suffix=state.completionApplied?` (includes +${state.solveBonus} solve +${state.timeBonus} time)`:''; document.getElementById('score').textContent=`Score: ${state.score}${suffix}`; }
+function renderLog(){ const ol=document.getElementById('moveLog'); ol.innerHTML=''; state.logs.forEach(e=>{const li=document.createElement('li'); li.textContent=e.summary; ol.appendChild(li);}); ol.scrollTop=ol.scrollHeight; }
+function renderSelection(){ clearHighlights(); if(!selected) return; const el=elementForRef(selected); if(el) el.classList.add('selected'); }
+function clearHighlights(){ document.querySelectorAll('.selected,.valid-target,.invalid-target').forEach(el=>el.classList.remove('selected','valid-target','invalid-target')); }
+function clearSolverHighlights(){ document.querySelectorAll('.solver-play').forEach(el=>el.classList.remove('solver-play')); }
+function elementForRef(ref){ if(ref.zone==='hold') return document.getElementById('tileh'); if(ref.zone==='inventory') return Number(ref.tileId)===currentZId()?document.getElementById('tilez'):null; return document.getElementById(`tile${ref.tileId}`); }
+function setStatus(text,complete=false){ const el=document.getElementById('status'); el.textContent=text; el.classList.toggle('game-over',complete); }
+function flashPoints(text,negative=false){ const el=document.getElementById('flash-points'); el.textContent=text; el.style.color=negative?'#b42318':'#238636'; clearTimeout(flashPoints.timer); flashPoints.timer=setTimeout(()=>el.textContent='',900); }
+
+function bindPointerEvents(){
+  document.addEventListener('pointerdown',e=>{
+    const ref=refFromElement(e.target);
+    if(!ref) return;
+    if(ref.zone==='hold' && !state.hold){
+      if(selected){ e.preventDefault(); const source=selected; selected=null; moveToHold(source); }
+      else setStatus('Select a playable tile first, then tap Hold.');
+      return;
+    }
+    if(!isPlayable(ref)) return;
+    const sourceEl=elementForRef(ref); pointerSession={id:e.pointerId,ref,startX:e.clientX,startY:e.clientY,dragging:false,ghost:null,sourceEl}; sourceEl.setPointerCapture?.(e.pointerId);
+  });
+  document.addEventListener('pointermove',e=>{
+    const p=pointerSession; if(!p||p.id!==e.pointerId) return;
+    const dist=Math.hypot(e.clientX-p.startX,e.clientY-p.startY);
+    if(!p.dragging&&dist>8){ p.dragging=true; p.ghost=p.sourceEl.cloneNode(true); p.ghost.className='tile drag-ghost'; document.body.appendChild(p.ghost); }
+    if(p.dragging){ p.ghost.style.left=`${e.clientX}px`; p.ghost.style.top=`${e.clientY}px`; highlightDropTarget(e.clientX,e.clientY,p.ref); e.preventDefault(); }
+  },{passive:false});
+  document.addEventListener('pointerup',e=>{
+    const p=pointerSession; if(!p||p.id!==e.pointerId) return; pointerSession=null;
+    if(p.ghost) p.ghost.remove(); clearHighlights();
+    if(!p.dragging){ activate(p.ref); return; }
+    const target=refAtPoint(e.clientX,e.clientY);
+    if(!target||sameRef(p.ref,target)){ setStatus('Tile returned to its original position.'); return; }
+    if(target.zone==='hold'&&!state.hold){ moveToHold(p.ref); return; }
+    matchRefs(p.ref,target);
+  });
+  document.addEventListener('pointercancel',()=>{ if(pointerSession?.ghost) pointerSession.ghost.remove(); pointerSession=null; clearHighlights(); });
+}
+function refAtPoint(x,y){ const el=document.elementFromPoint(x,y); return refFromElement(el); }
+function highlightDropTarget(x,y,source){
+  clearHighlights(); const src=elementForRef(source); if(src) src.classList.add('selected'); const target=refAtPoint(x,y); if(!target||sameRef(source,target)) return;
+  const el=elementForRef(target); if(!el) return;
+  const valid=(target.zone==='hold'&&!state.hold)|| (isPlayable(target)&&isPair(source,target)); el.classList.add(valid?'valid-target':'invalid-target');
+}
+function localTimestampForFilename(){
+  const d=new Date(), pad=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+function downloadLog(){
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT},solverSessionStats,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+}
+
+
+const SEARCH_DEPTH=24;
+const SEARCH_NODE_LIMIT=100000;
+const SEARCH_BEAM_WIDTH=18;
+const PLAN_BEAM_WIDTH=640;
+const PLAN_MAX_DEPTH=100;
+const PERFECT_PROBE_BEAM_WIDTH=900;
+const PERFECT_PROBE_NODE_LIMIT=50000;
+const PERFECT_PROBE_MAX_DEPTH=80;
+const MAX_SOLVER_RESETS=5;
+let solverPreviewMs=1000;
+let solverRunning=false;
+let solverSessionStats={decisions:0,totalNodes:0,duplicates:0,deadBranches:0,limitHits:0};
+let solverActualSeen=new Map();
+let pendingSolverMeta=null;
+let solverPlan=[];
+let solverPlanIndex=0;
+let solverPlanResult=null;
+let executingPlannedAction=false;
+
+function simClone(s){ return JSON.parse(JSON.stringify(s)); }
+function simCurrentInventoryIds(s){ return [...s.inPlay].sort((a,b)=>b-a).slice(0,3); }
+function simCurrentZId(s){ return simCurrentInventoryIds(s)[0]??null; }
+function simEmojiOf(s,ref){
+  if(ref.zone==='hold') return s.hold?.emoji||null;
+  return s.tileData[ref.tileId]||null;
+}
+function simPyramidPlayable(s,id){ return (BLOCKERS[id]||[]).every(b=>s.tileData[b]===null); }
+function simPlayable(s,ref){
+  if(!ref||s.gameOver) return false;
+  if(ref.zone==='hold') return !!s.hold;
+  if(ref.zone==='inventory') return Number(ref.tileId)===simCurrentZId(s);
+  return !!s.tileData[ref.tileId] && simPyramidPlayable(s,Number(ref.tileId));
+}
+function simPair(s,a,b){ const x=simEmojiOf(s,a),y=simEmojiOf(s,b); return !!x&&!!y&&EMOJI_PAIRS[x]===y; }
+function simRemove(s,ref){
+  if(ref.zone==='hold'){ s.hold=null; return; }
+  const id=Number(ref.tileId); s.tileData[id]=null;
+  if(id>=29){ const i=s.inPlay.indexOf(id); if(i>=0)s.inPlay.splice(i,1); const q=s.stockQueue.indexOf(id); if(q>=0)s.stockQueue.splice(q,1); }
+}
+function simAward(s){ s.streak++; s.score+=Math.min(s.streak,5)*50; }
+function simComplete(s){ if(s.completionApplied)return; s.gameOver=true; s.completionApplied=true; s.solveBonus=SOLVE_BONUS; s.timeBonus=TIME_BONUS; s.score+=SOLVE_BONUS+TIME_BONUS; }
+function simPlayableRefs(s){
+  const refs=[];
+  for(let i=1;i<=28;i++) if(s.tileData[i]&&simPyramidPlayable(s,i)) refs.push({zone:'pyramid',tileId:i});
+  const z=simCurrentZId(s); if(z) refs.push({zone:'inventory',tileId:z});
+  if(s.hold) refs.push({zone:'hold',tileId:'h'});
+  return refs;
+}
+function generateLegalActions(s){
+  if(s.gameOver) return [];
+  const refs=simPlayableRefs(s), actions=[];
+  for(const r of refs) if(UNMATCHED.has(simEmojiOf(s,r))) actions.push({type:'CLEAR',a:r});
+  for(let i=0;i<refs.length;i++) for(let j=i+1;j<refs.length;j++) if(simPair(s,refs[i],refs[j])){
+    const a=refs[i],b=refs[j];
+    if(a.zone==='hold'||b.zone==='hold') actions.push({type:'MATCH_HOLD',a,b});
+    else actions.push({type:'MATCH',a,b});
+  }
+  if(!s.hold){
+    for(const r of refs){
+      if(r.zone==='hold') continue;
+      if(UNMATCHED.has(simEmojiOf(s,r))) continue; // unmatched tiles clear automatically; never legal Hold candidates.
+      actions.push({type:'HOLD',a:r});
+    }
+  }
+  if(s.stockQueue.length) actions.push({type:'DRAW'});
+  else if(s.inPlay.length && (s.resetsUsed||0)<MAX_SOLVER_RESETS) actions.push({type:'RESET'});
+  return actions;
+}
+function simApplyAction(s,action){
+  const n=simClone(s);
+  if(action.type==='CLEAR'){
+    const id=Number(action.a.tileId); simRemove(n,action.a); simAward(n); if(id===1)simComplete(n);
+  }else if(action.type==='MATCH'||action.type==='MATCH_HOLD'){
+    const id1=Number(action.a.tileId),id2=Number(action.b.tileId); simRemove(n,action.a); simRemove(n,action.b); simAward(n); if(id1===1||id2===1)simComplete(n);
+  }else if(action.type==='HOLD'){
+    const emoji=simEmojiOf(n,action.a),id=action.a.tileId;
+    if(UNMATCHED.has(emoji)) return null; // Unmatched tiles clear directly; they are not Hold candidates.
+    simRemove(n,action.a); n.hold={emoji,sourceId:id,sourceZone:action.a.zone}; if(Number(id)===1)simComplete(n);
+  }else if(action.type==='DRAW'){
+    const drawn=n.stockQueue.splice(0,Math.min(3,n.stockQueue.length)); n.inPlay.push(...drawn); n.streak=0;
+  }else if(action.type==='RESET'){
+    n.stockQueue=[...n.inPlay].sort((a,b)=>a-b); n.inPlay=[]; n.streak=0; n.score=Math.max(0,n.score-50); n.resetsUsed=(n.resetsUsed||0)+1;
+  }
+  return n;
+}
+function clearedPyramidCount(s){ let n=0; for(let i=1;i<=28;i++) if(s.tileData[i]===null)n++; return n; }
+function exposedPyramidCount(s){ let n=0; for(let i=1;i<=28;i++) if(s.tileData[i]&&simPyramidPlayable(s,i))n++; return n; }
+function immediateScoringCount(s){
+  const refs=simPlayableRefs(s); let n=refs.filter(r=>UNMATCHED.has(simEmojiOf(s,r))).length;
+  for(let i=0;i<refs.length;i++) for(let j=i+1;j<refs.length;j++) if(simPair(s,refs[i],refs[j])) n++;
+  return n;
+}
+function holdQuality(s){
+  if(!s.hold) return 0;
+  const h={zone:'hold',tileId:'h'}; const refs=simPlayableRefs(s).filter(r=>r.zone!=='hold');
+  return refs.some(r=>simPair(s,h,r))?35:-10;
+}
+function evaluateState(s){
+  const invUsed=inventoryUsedCount(s), cleared=clearedPyramidCount(s), exposed=exposedPyramidCount(s), scoring=immediateScoringCount(s);
+  if(s.gameOver){
+    const perfect=(s.score===PERFECT_SCORE && invUsed===24)?5000000:0;
+    return 3000000 + perfect + s.score*1000 + invUsed*5000 - (s.resetsUsed||0)*500;
+  }
+  return s.score*12 + cleared*900 + invUsed*260 + exposed*55 + scoring*100 + s.streak*75 + holdQuality(s) - (s.resetsUsed||0)*140;
+}
+function structuralStateKey(s,includeDepth='',includeResets=true){
+  const pyramid=[]; for(let i=1;i<=28;i++) pyramid.push(s.tileData[i]||'-');
+  const inventoryValues=[]; for(let i=29;i<=52;i++) inventoryValues.push(s.tileData[i]||'-');
+  const parts=[includeDepth,pyramid.join(','),inventoryValues.join(','),s.stockQueue.join('.'),[...s.inPlay].sort((a,b)=>a-b).join('.'),s.hold?.emoji||'-',s.streak];
+  if(includeResets) parts.push(s.resetsUsed||0);
+  return parts.join('|');
+}
+function stateKey(s,depth){ return structuralStateKey(s,depth,true); }
+function effectiveActualKey(s){ return structuralStateKey(s,'actual',false); }
+function quickActionBias(s,action,next){
+  let b=0;
+  if(action.type==='MATCH'||action.type==='MATCH_HOLD') b+=120;
+  if(action.type==='CLEAR') b+=90;
+  if(action.type==='HOLD') b-=25;
+  if(action.type==='DRAW') b-=80 + s.streak*35;
+  if(action.type==='RESET') b-=180;
+  b+=(clearedPyramidCount(next)-clearedPyramidCount(s))*100;
+  b+=(exposedPyramidCount(next)-exposedPyramidCount(s))*70;
+  b+=(inventoryUsedCount(next)-inventoryUsedCount(s))*90;
+  if(next.gameOver)b+=1000000;
+  return b;
+}
+function searchValue(s,depth,ctx){
+  ctx.nodes++;
+  if(ctx.nodes>=SEARCH_NODE_LIMIT){ ctx.limitReached=true; return evaluateState(s); }
+  if(depth<=0 || s.gameOver) return evaluateState(s);
+  const key=stateKey(s,depth);
+  const dominated=ctx.bestSeen.get(key);
+  if(dominated!==undefined && dominated>=s.score){ ctx.duplicates++; return evaluateState(s)-120; }
+  ctx.bestSeen.set(key,Math.max(dominated??-Infinity,s.score));
+  if(ctx.memo.has(key)) { ctx.duplicates++; return ctx.memo.get(key); }
+  let actions=generateLegalActions(s);
+  if(!actions.length){ ctx.deadBranches++; const v=evaluateState(s)-20000; ctx.memo.set(key,v); return v; }
+  actions=actions.map(a=>{const n=simApplyAction(s,a);return {a,n,q:evaluateState(n)+quickActionBias(s,a,n)}}).sort((x,y)=>y.q-x.q).slice(0,SEARCH_BEAM_WIDTH);
+  let best=-Infinity;
+  for(const item of actions){
+    if(ctx.nodes>=SEARCH_NODE_LIMIT){ ctx.limitReached=true; break; }
+    const v=searchValue(item.n,depth-1,ctx);
+    if(v>best) best=v;
+  }
+  ctx.memo.set(key,best); return best;
+}
+function refLabelForState(s,ref){
+  if(ref.zone==='hold') return `Hold ${simEmojiOf(s,ref)}`;
+  if(ref.zone==='inventory') return `Z / tile ${ref.tileId} ${simEmojiOf(s,ref)}`;
+  return `tile ${ref.tileId} ${simEmojiOf(s,ref)}`;
+}
+function actionLabel(s,a){
+  if(a.type==='CLEAR') return `Clear ${refLabelForState(s,a.a)} (unmatched)`;
+  if(a.type==='MATCH'||a.type==='MATCH_HOLD') return `Match ${refLabelForState(s,a.a)} + ${refLabelForState(s,a.b)}`;
+  if(a.type==='HOLD') return `Hold ${refLabelForState(s,a.a)}`;
+  if(a.type==='DRAW') return 'Draw next inventory tiles';
+  if(a.type==='RESET') return 'Reset inventory';
+  return a.type;
+}
+function explainCandidate(before,action,after){
+  const reasons=[];
+  const newly=exposedPyramidCount(after)-exposedPyramidCount(before);
+  const cleared=clearedPyramidCount(after)-clearedPyramidCount(before);
+  if(cleared>0) reasons.push(`clears ${cleared} pyramid tile${cleared===1?'':'s'}`);
+  if(newly>0) reasons.push(`exposes ${newly} new pyramid tile${newly===1?'':'s'}`);
+  if((action.type==='MATCH'||action.type==='MATCH_HOLD'||action.type==='CLEAR') && before.streak>0) reasons.push(`continues streak ${before.streak}→${after.streak}`);
+  if((action.type==='MATCH'||action.type==='MATCH_HOLD') && (action.a.zone==='inventory'||action.b.zone==='inventory')) reasons.push('advances playable Z inventory');
+  if(action.type==='HOLD') reasons.push('setup move; preserves tile without breaking streak');
+  if(action.type==='DRAW') reasons.push(`breaks streak ${before.streak}→0`);
+  if(action.type==='RESET') reasons.push('costs 50 points and starts a new inventory pass');
+  const future=immediateScoringCount(after); if(future>0) reasons.push(`${future} immediate scoring option${future===1?'':'s'} remain`);
+  if(after.gameOver) reasons.push('finishes the puzzle');
+  return reasons.join('; ')||'legal move';
+}
+function evaluateDecision(){
+  const actions=generateLegalActions(state);
+  if(!actions.length) return {action:null,candidates:[],nodes:0,duplicates:0,deadBranches:0,limitReached:false};
+  const ctx={nodes:0,memo:new Map(),bestSeen:new Map(),duplicates:0,deadBranches:0,limitReached:false};
+  const candidates=actions.map(action=>{
+    const next=simApplyAction(state,action);
+    const rating=searchValue(next,SEARCH_DEPTH-1,ctx)+quickActionBias(state,action,next);
+    return {action,rating,next,label:actionLabel(state,action),reason:explainCandidate(state,action,next)};
+  }).sort((a,b)=>b.rating-a.rating);
+  return {action:candidates[0].action,candidates,nodes:ctx.nodes,duplicates:ctx.duplicates,deadBranches:ctx.deadBranches,limitReached:ctx.limitReached};
+}
+function renderDecision(decision){
+  const summary=document.getElementById('thoughtSummary'), body=document.getElementById('candidateBody');
+  body.innerHTML='';
+  document.getElementById('decisionStates').textContent=(decision?.nodes||0).toLocaleString();
+  document.getElementById('totalStates').textContent=solverSessionStats.totalNodes.toLocaleString();
+  document.getElementById('duplicateSkips').textContent=solverSessionStats.duplicates.toLocaleString();
+  document.getElementById('deadBranches').textContent=solverSessionStats.deadBranches.toLocaleString();
+  const opt=document.getElementById('optimalityStatus');
+  opt.textContent=decision?.limitReached ? `BEST FOUND — search hit the ${SEARCH_NODE_LIMIT.toLocaleString()}-state limit; optimality not proven.` : `BEST FOUND within ${SEARCH_DEPTH}-ply lookahead; optimality not proven.`;
+  if(!decision||!decision.candidates.length){ summary.textContent='No legal move found.'; body.innerHTML='<tr><td colspan="3">No candidates.</td></tr>'; return; }
+  summary.innerHTML=`<span class="strategy-metric"><strong>Lookahead:</strong> ${SEARCH_DEPTH} plies</span><span class="strategy-metric"><strong>States examined:</strong> ${decision.nodes.toLocaleString()}</span><span class="strategy-metric"><strong>Choice:</strong> ${decision.candidates[0].label}</span>`;
+  decision.candidates.slice(0,10).forEach((c,i)=>{
+    const tr=document.createElement('tr'); if(i===0) tr.className='chosen';
+    const td1=document.createElement('td'),td2=document.createElement('td'),td3=document.createElement('td');
+    td1.textContent=(i===0?'✓ ':'')+c.label; td2.textContent=Math.round(c.rating).toLocaleString(); td3.textContent=c.reason;
+    tr.append(td1,td2,td3); body.appendChild(tr);
+  });
+}
+function refsForSolverAction(action){
+  if(!action) return [];
+  if(action.type==='CLEAR'||action.type==='HOLD') return [action.a];
+  if(action.type==='MATCH') return [action.a,action.b];
+  return [];
+}
+function centerOf(el){ const r=el.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; }
+async function animateSolverDrag(sourceRef,targetRef){
+  const sourceEl=elementForRef(sourceRef), targetEl=elementForRef(targetRef);
+  if(!sourceEl||!targetEl) return false;
+  const from=centerOf(sourceEl), to=centerOf(targetEl);
+  const ghost=sourceEl.cloneNode(true);
+  ghost.className='tile drag-ghost solver-drag';
+  const dragMs=Math.max(260,Math.round(solverPreviewMs*.72));
+  ghost.style.setProperty('--solver-drag-ms',`${dragMs}ms`);
+  ghost.style.left=`${from.x}px`; ghost.style.top=`${from.y}px`;
+  document.body.appendChild(ghost);
+
+  // The real tile becomes only a dotted placeholder while its animated copy moves.
+  sourceEl.classList.add('solver-origin-placeholder');
+  targetEl.classList.add('solver-play');
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  ghost.style.left=`${to.x}px`; ghost.style.top=`${to.y}px`; ghost.style.transform='translate(-50%,-50%) scale(.92)';
+  await new Promise(r=>setTimeout(r,dragMs));
+  ghost.remove();
+  sourceEl.classList.remove('solver-origin-placeholder');
+  clearSolverHighlights();
+  return true;
+}
+async function animateUnmatchedBurst(ref){
+  const el=elementForRef(ref);
+  if(!el) return false;
+  const at=centerOf(el);
+  const burstMs=Math.max(430,Math.round(solverPreviewMs*.70));
+  el.classList.add('solver-play','king-pop');
+  el.style.setProperty('--king-burst-ms',`${burstMs}ms`);
+  const burst=document.createElement('div');
+  burst.className='king-burst';
+  burst.style.left=`${at.x}px`; burst.style.top=`${at.y}px`;
+  burst.style.setProperty('--king-burst-ms',`${burstMs}ms`);
+  for(let i=0;i<10;i++){
+    const spark=document.createElement('span');
+    const angle=(Math.PI*2*i/10)-(Math.PI/2);
+    const distance=32+(i%2)*12;
+    spark.style.setProperty('--dx',`${Math.cos(angle)*distance}px`);
+    spark.style.setProperty('--dy',`${Math.sin(angle)*distance}px`);
+    burst.appendChild(spark);
+  }
+  document.body.appendChild(burst);
+  await new Promise(r=>setTimeout(r,burstMs));
+  burst.remove();
+  el.classList.remove('king-pop');
+  el.style.removeProperty('--king-burst-ms');
+  clearSolverHighlights();
+  return true;
+}
+async function previewSolverAction(action){
+  clearSolverHighlights();
+  if(action?.type==='HOLD'){
+    const ok=await animateSolverDrag(action.a,{zone:'hold',tileId:'h'});
+    if(ok) return;
+  }
+  if(action?.type==='MATCH'||action?.type==='MATCH_HOLD'){
+    let source=action.a,target=action.b;
+    const aEl=elementForRef(action.a), bEl=elementForRef(action.b);
+    if(aEl&&bEl){
+      // Playback preference: move tiles upward / toward the pyramid whenever possible.
+      if(action.a.zone==='pyramid' && action.b.zone!=='pyramid'){
+        source=action.b; target=action.a;
+      }else if(action.b.zone==='pyramid' && action.a.zone!=='pyramid'){
+        source=action.a; target=action.b;
+      }else{
+        const aY=centerOf(aEl).y, bY=centerOf(bEl).y;
+        if(aY<bY){ source=action.b; target=action.a; }
+      }
+    }else if(!aEl&&bEl){
+      source=action.b; target=action.a;
+    }
+    const ok=await animateSolverDrag(source,target);
+    if(ok) return;
+  }
+  if(action?.type==='CLEAR'){
+    const ok=await animateUnmatchedBurst(action.a);
+    if(ok) return;
+  }
+  const refs=refsForSolverAction(action);
+  refs.forEach(ref=>{ const el=elementForRef(ref); if(el) el.classList.add('solver-play'); });
+  await new Promise(resolve=>setTimeout(resolve,solverPreviewMs));
+  clearSolverHighlights();
+}
+function updateSolverSession(decision){
+  solverSessionStats.decisions++;
+  solverSessionStats.totalNodes+=decision.nodes||0;
+  solverSessionStats.duplicates+=decision.duplicates||0;
+  solverSessionStats.deadBranches+=decision.deadBranches||0;
+  if(decision.limitReached) solverSessionStats.limitHits++;
+}
+function buildSolverMeta(decision){
+  return {
+    searchDepth:SEARCH_DEPTH,
+    stateLimit:SEARCH_NODE_LIMIT,
+    statesExamined:decision.nodes||0,
+    duplicateOrWorseStatesSkipped:decision.duplicates||0,
+    deadBranches:decision.deadBranches||0,
+    searchLimitReached:!!decision.limitReached,
+    resultLabel:'BEST FOUND',
+    optimalityProven:false,
+    chosen:decision.candidates[0]?.label||null,
+    topCandidates:decision.candidates.slice(0,5).map(c=>({move:c.label,rating:Math.round(c.rating),reason:c.reason}))
+  };
+}
+
+function betterCompleted(a,b){
+  if(!b) return true;
+  const ap=(a.state.score===PERFECT_SCORE&&inventoryUsedCount(a.state)===24), bp=(b.state.score===PERFECT_SCORE&&inventoryUsedCount(b.state)===24);
+  if(ap!==bp) return ap;
+  if(a.state.score!==b.state.score) return a.state.score>b.state.score;
+  const ai=inventoryUsedCount(a.state),bi=inventoryUsedCount(b.state); if(ai!==bi)return ai>bi;
+  if((a.state.resetsUsed||0)!==(b.state.resetsUsed||0)) return (a.state.resetsUsed||0)<(b.state.resetsUsed||0);
+  return a.path.length<b.path.length;
+}
+function planRank(node){
+  const s=node.state, cleared=clearedPyramidCount(s), inv=inventoryUsedCount(s);
+  if(s.gameOver)return evaluateState(s);
+  return cleared*42000 + inv*12000 + s.score*30 + s.streak*160 + exposedPyramidCount(s)*500 + immediateScoringCount(s)*450 - (s.resetsUsed||0)*1000 - node.path.length*3;
+}
+function updatePlanPanel(result,progressText=''){
+  document.getElementById('planStates').textContent=(result?.statesExamined||0).toLocaleString();
+  document.getElementById('solutionsFound').textContent=(result?.solutionsFound||0).toLocaleString();
+  document.getElementById('bestPlanScore').textContent=result?.bestCompletedScore!=null?result.bestCompletedScore.toLocaleString():'—';
+  document.getElementById('bestImprovements').textContent=(result?.bestScoreImprovements||0).toLocaleString();
+  document.getElementById('bestPartialScore').textContent=result?.bestPartialScore!=null?result.bestPartialScore.toLocaleString():'—';
+  document.getElementById('inventoryUsed').textContent=`${result?.selectedInventoryUsed||0}/24`;
+  document.getElementById('perfectCandidates').textContent=(result?.perfectCandidates||0).toLocaleString();
+  document.getElementById('perfectPossible').textContent=result?.selectedPerfectPossible===false?'NO':'YES';
+  const status=document.getElementById('planStatus');
+  if(!result){ status.textContent='No full-plan search run yet.'; }
+  else if(result.bestCompletedScore!=null){ status.textContent=`BEST COMPLETE SOLUTION FOUND: ${result.bestCompletedScore.toLocaleString()} points in ${result.bestMoveCount} moves with ${result.bestResets} reset${result.bestResets===1?'':'s'}. ${result.bestCompletedScore===PERFECT_SCORE?'PERFECT 8260!':''}`; }
+  else { status.textContent=`BEST PARTIAL — PUZZLE NOT SOLVED. Partial score ${result.bestPartialScore?.toLocaleString()||0}.`; }
+  document.getElementById('planProgress').textContent=progressText||result?.stopReason||'';
+}
+function planStateKey(s){ return structuralStateKey(s,'plan',true); }
+function makeAction(type,a=null,b=null){ const x={type}; if(a)x.a=a; if(b)x.b=b; return x; }
+function buildPerfectSetupSeeds(initial){
+  const seeds=[];
+  function addSeed(label,drawBeforeHold){
+    let st=simClone(initial), path=[];
+    if(drawBeforeHold===0){
+      for(let i=0;i<8;i++){ if(!st.stockQueue.length)return; const a=makeAction('DRAW'); st=simApplyAction(st,a); path.push(a); }
+    }else{
+      for(let i=0;i<drawBeforeHold;i++){ if(!st.stockQueue.length)return; const a=makeAction('DRAW'); st=simApplyAction(st,a); path.push(a); }
+      const z=simCurrentZId(st); if(!z||st.hold)return;
+      const zRef={zone:'inventory',tileId:z};
+      if(UNMATCHED.has(simEmojiOf(st,zRef))) return; // This setup is impossible: unmatched tiles clear directly and cannot be held.
+      const h=makeAction('HOLD',zRef); st=simApplyAction(st,h); if(!st)return; path.push(h);
+      for(let i=drawBeforeHold;i<8;i++){ if(!st.stockQueue.length)return; const a=makeAction('DRAW'); st=simApplyAction(st,a); path.push(a); }
+    }
+    seeds.push({state:st,path,seedLabel:label,rank:planRank({state:st,path})});
+  }
+  addSeed('8 draws → start at 52',0);
+  for(let d=1;d<=8;d++) addSeed(`draw ${d} → hold ${28+d*3} → draw ${8-d} more`,d);
+  return seeds;
+}
+
+function perfectProbeActions(s){
+  // A true 8260 route has finished all setup draws already. From here on,
+  // Draw/Reset would break the 28-action scoring streak, so the probe only
+  // explores scoring moves and strategic Hold moves.
+  return generateLegalActions(s).filter(a=>a.type!=='DRAW' && a.type!=='RESET');
+}
+function perfectProbeRank(node){
+  const s=node.state;
+  if(s.gameOver) return (s.score===PERFECT_SCORE && inventoryUsedCount(s)===24) ? 1e15 : -1e15;
+  const cleared=clearedPyramidCount(s), inv=inventoryUsedCount(s);
+  const progress=cleared+inv;
+  return progress*1000000 + s.streak*250000 + s.score*100 + exposedPyramidCount(s)*2500 + immediateScoringCount(s)*1800 - node.path.length*5;
+}
+async function searchPerfectScore(initial){
+  const seeds=buildPerfectSetupSeeds(initial);
+  const probe={checked:true,setupsTested:0,setupCount:seeds.length,statesExamined:0,duplicatesSkipped:0,found:false,winningSetup:null,pathLength:null,score:null,inventoryUsed:0,stopReason:''};
+  for(const seed of seeds){
+    probe.setupsTested++;
+    let frontier=[{state:seed.state,path:seed.path,rank:perfectProbeRank({state:seed.state,path:seed.path})}];
+    const seen=new Map([[planStateKey(seed.state),seed.state.score]]);
+    for(let depth=0; depth<PERFECT_PROBE_MAX_DEPTH && frontier.length && probe.statesExamined<PERFECT_PROBE_NODE_LIMIT; depth++){
+      const nextNodes=[];
+      for(const node of frontier){
+        const actions=perfectProbeActions(node.state);
+        for(const action of actions){
+          if(probe.statesExamined>=PERFECT_PROBE_NODE_LIMIT) break;
+          probe.statesExamined++;
+          const next=simApplyAction(node.state,action);
+          const path=node.path.concat([action]);
+          if(next.gameOver){
+            if(next.score===PERFECT_SCORE && inventoryUsedCount(next)===24){
+              probe.found=true; probe.winningSetup=seed.seedLabel; probe.pathLength=path.length; probe.score=next.score; probe.inventoryUsed=24;
+              probe.stopReason=`Perfect 8260 route found with setup: ${seed.seedLabel}.`;
+              return {probe,path,state:next};
+            }
+            continue;
+          }
+          // If scoring has started, any perfect route must preserve a single uninterrupted streak.
+          if(next.score!==streakScore(next.streak)) continue;
+          const key=planStateKey(next), prev=seen.get(key);
+          if(prev!==undefined && prev>=next.score){ probe.duplicatesSkipped++; continue; }
+          seen.set(key,next.score);
+          nextNodes.push({state:next,path,rank:perfectProbeRank({state:next,path})});
+        }
+        if(probe.statesExamined>=PERFECT_PROBE_NODE_LIMIT) break;
+      }
+      nextNodes.sort((a,b)=>b.rank-a.rank);
+      frontier=nextNodes.slice(0,PERFECT_PROBE_BEAM_WIDTH);
+      document.getElementById('planProgress').textContent=`8260 probe: setup ${probe.setupsTested}/${probe.setupCount} (${seed.seedLabel}); ${probe.statesExamined.toLocaleString()} states checked.`;
+      await new Promise(r=>setTimeout(r,0));
+    }
+    if(probe.statesExamined>=PERFECT_PROBE_NODE_LIMIT) break;
+  }
+  probe.stopReason=probe.statesExamined>=PERFECT_PROBE_NODE_LIMIT
+    ? `8260 probe reached its ${PERFECT_PROBE_NODE_LIMIT.toLocaleString()}-state limit without finding a perfect route; continuing with normal solver.`
+    : 'Known 8260 setup family checked; no perfect route found. Continuing with normal solver.';
+  return {probe,path:null,state:null};
+}
+async function searchBestPlan(){
+  const initial=simClone(state);
+  const result={statesExamined:0,duplicatesSkipped:0,deadBranches:0,solutionsFound:0,perfectCandidates:0,bestCompletedScore:null,bestMoveCount:null,bestResets:null,bestScoreImprovements:0,bestPartialScore:initial.score,limitReached:false,optimalityProven:false,stopReason:'',searchedDepth:0,perfectSetupSeeds:0};
+  const perfectSeeds=buildPerfectSetupSeeds(initial); result.perfectSetupSeeds=perfectSeeds.length;
+  let frontier=[{state:initial,path:[],rank:planRank({state:initial,path:[]}),seedLabel:'general'}];
+  let bestComplete=null;
+  let bestPartial={state:initial,path:[],rank:planRank({state:initial,path:[]})};
+  const seen=new Map(); frontier.forEach(n=>{const k=planStateKey(n.state),p=seen.get(k); if(p===undefined||n.state.score>p)seen.set(k,n.state.score);});
+  updatePlanPanel(result,'Starting full-plan search…');
+  for(let depth=0; depth<PLAN_MAX_DEPTH && frontier.length && result.statesExamined<SEARCH_NODE_LIMIT; depth++){
+    result.searchedDepth=depth+1;
+    const nextNodes=[];
+    for(const node of frontier){
+      const actions=generateLegalActions(node.state);
+      if(!actions.length){ result.deadBranches++; continue; }
+      const ordered=actions.map(action=>{
+        const next=simApplyAction(node.state,action);
+        return {action,next,q:evaluateState(next)+quickActionBias(node.state,action,next)};
+      }).sort((a,b)=>b.q-a.q);
+      for(const item of ordered){
+        if(result.statesExamined>=SEARCH_NODE_LIMIT){ result.limitReached=true; break; }
+        result.statesExamined++;
+        const path=node.path.concat([item.action]);
+        const next=item.next;
+        if(next.gameOver){
+          result.solutionsFound++;
+          if(next.score===PERFECT_SCORE && inventoryUsedCount(next)===24) result.perfectCandidates++;
+          const candidate={state:next,path};
+          if(betterCompleted(candidate,bestComplete)){
+            bestComplete=candidate;
+            result.bestCompletedScore=next.score;
+            result.bestMoveCount=path.length;
+            result.bestResets=next.resetsUsed||0;
+            result.bestScoreImprovements++;
+          }
+          continue;
+        }
+        const key=planStateKey(next), prev=seen.get(key);
+        if(prev!==undefined && prev>=next.score){ result.duplicatesSkipped++; continue; }
+        seen.set(key,next.score);
+        const rank=planRank({state:next,path});
+        if(next.score>result.bestPartialScore)result.bestPartialScore=next.score;
+        if(rank>bestPartial.rank) bestPartial={state:next,path,rank};
+        nextNodes.push({state:next,path,rank});
+      }
+      if(result.limitReached) break;
+    }
+    nextNodes.sort((a,b)=>b.rank-a.rank);
+    frontier=nextNodes.slice(0,PLAN_BEAM_WIDTH);
+    updatePlanPanel(result,`Searching… depth ${depth+1}; frontier ${frontier.length.toLocaleString()}; ${(result.statesExamined).toLocaleString()} scenarios examined.`);
+    await new Promise(r=>setTimeout(r,0));
+  }
+  if(result.limitReached) result.stopReason=`Stopped at the ${SEARCH_NODE_LIMIT.toLocaleString()}-scenario limit. Best result found, not proof of optimality.`;
+  else if(!frontier.length) result.stopReason='Search frontier exhausted within the beam search. Because beam pruning was used, optimality is not proven.';
+  else result.stopReason=`Stopped at plan depth ${PLAN_MAX_DEPTH}. Best result found, not proof of optimality.`;
+  const chosen=bestComplete||bestPartial;
+  result.usedCompleteSolution=!!bestComplete;
+  result.selectedPathLength=chosen.path.length;
+  result.selectedFinalScore=chosen.state.score;
+  result.selectedInventoryUsed=inventoryUsedCount(chosen.state);
+  result.selectedPerfectPossible=perfectRoutePossible(chosen.state);
+  result.bestPartialScore=Math.max(result.bestPartialScore,bestPartial.state.score);
+  result.duplicatesSkipped=result.duplicatesSkipped;
+  result.deadBranches=result.deadBranches;
+  updatePlanPanel(result,result.stopReason);
+  return {result,path:chosen.path};
+}
+function buildPlanMeta(action,index){
+  return {
+    mode:'FULL_PLAN',
+    resultLabel:solverPlanResult?.usedCompleteSolution?'BEST COMPLETE FOUND':'BEST PARTIAL FOUND',
+    optimalityProven:false,
+    planStatesExamined:solverPlanResult?.statesExamined||0,
+    completeSolutionsFound:solverPlanResult?.solutionsFound||0,
+    bestCompletedScore:solverPlanResult?.bestCompletedScore,
+    bestPartialScore:solverPlanResult?.bestPartialScore,
+    inventoryUsed:solverPlanResult?.selectedInventoryUsed,
+    perfectCandidates:solverPlanResult?.perfectCandidates||0,
+    perfectProbe:solverPlanResult?.perfectProbe||null,
+    planMove:index+1,
+    plannedMoves:solverPlan.length,
+    chosen:actionLabel(state,action)
+  };
+}
+function drawRunInfo(path,index){
+  if(path[index]?.type!=='DRAW')return null;
+  let start=index,end=index; while(start>0&&path[start-1]?.type==='DRAW')start--; while(end+1<path.length&&path[end+1]?.type==='DRAW')end++;
+  return {position:index-start+1,total:end-start+1};
+}
+function setDrawCounter(info){ const el=document.getElementById('draw-counter'); el.classList.remove('reset-sign'); if(!info){el.classList.remove('visible');return;} el.textContent=`${info.position}/${info.total}`; el.classList.add('visible'); }
+function setResetIndicator(){ const el=document.getElementById('draw-counter'); el.textContent='RESET'; el.classList.add('visible','reset-sign'); }
+async function previewDraw(info){ const btn=document.getElementById('draw-button'); setDrawCounter(info||{position:1,total:1}); btn.classList.add('solver-draw-flash'); await new Promise(r=>setTimeout(r,solverPreviewMs)); btn.classList.remove('solver-draw-flash'); }
+async function previewReset(){ const btn=document.getElementById('draw-button'); setResetIndicator(); btn.classList.add('solver-reset-flash'); await new Promise(r=>setTimeout(r,solverPreviewMs)); btn.classList.remove('solver-reset-flash'); }
+async function executePlannedAction(animated=true){
+  if(solverPlanIndex>=solverPlan.length) return false;
+  const action=solverPlan[solverPlanIndex];
+  pendingSolverMeta=buildPlanMeta(action,solverPlanIndex);
+  executingPlannedAction=true;
+  if(animated){ if(action.type==='DRAW') await previewDraw(drawRunInfo(solverPlan,solverPlanIndex)); else if(action.type==='RESET') await previewReset(); else { setDrawCounter(null); await previewSolverAction(action); } }
+  if(action.type==='CLEAR') clearUnmatched(action.a);
+  else if(action.type==='MATCH'||action.type==='MATCH_HOLD') matchRefs(action.a,action.b);
+  else if(action.type==='HOLD') moveToHold(action.a);
+  else if(action.type==='DRAW') draw();
+  else if(action.type==='RESET') resetStock();
+  solverPlanIndex++;
+  executingPlannedAction=false;
+  pendingSolverMeta=null;
+  document.getElementById('planProgress').textContent=`Playing planned move ${solverPlanIndex} of ${solverPlan.length}.`;
+  return true;
+}
+
+async function executeSolverStep(animated=true){
+  const effective=effectiveActualKey(state);
+  const previousBest=solverActualSeen.get(effective);
+  if(previousBest!==undefined && previousBest>=state.score){
+    pauseSolver();
+    setStatus('Solver stopped: it reached a repeated game state without improving the score.');
+    document.getElementById('optimalityStatus').textContent='Stopped repeated non-improving cycle. A different earlier branch is needed.';
+    return false;
+  }
+  solverActualSeen.set(effective,state.score);
+  setStatus(`Searching up to ${SEARCH_NODE_LIMIT.toLocaleString()} simulated states…`);
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  const decision=evaluateDecision();
+  updateSolverSession(decision); renderDecision(decision);
+  const action=decision.action;
+  if(!action){ pauseSolver(); setStatus('No legal strategic move remains.'); return false; }
+  pendingSolverMeta=buildSolverMeta(decision);
+  if(animated){ if(action.type==='DRAW') await previewDraw({position:1,total:1}); else if(action.type==='RESET') await previewReset(); else { setDrawCounter(null); await previewSolverAction(action); } }
+  if(action.type==='CLEAR') clearUnmatched(action.a);
+  else if(action.type==='MATCH'||action.type==='MATCH_HOLD') matchRefs(action.a,action.b);
+  else if(action.type==='HOLD') moveToHold(action.a);
+  else if(action.type==='DRAW') draw();
+  else if(action.type==='RESET') resetStock();
+  pendingSolverMeta=null;
+  return true;
+}
+async function solverLoop(){
+  while(solverRunning && !state.gameOver && solverPlanIndex<solverPlan.length){
+    const ok=await executePlannedAction(true);
+    if(!ok||!solverRunning||state.gameOver) break;
+    await new Promise(r=>setTimeout(r,Math.max(90,Math.round(solverPreviewMs*.18))));
+  }
+  solverRunning=false;
+  if(state.gameOver) document.getElementById('planProgress').textContent=`Plan completed. Final score: ${state.score.toLocaleString()} (includes +${SOLVE_BONUS} completion +${TIME_BONUS} time). Inventory used: ${inventoryUsedCount(state)}/24.`;
+  else if(solverPlanIndex>=solverPlan.length) setStatus('Saved plan finished.');
+}
+async function prepareSolverPlan(){
+  const startButton=document.getElementById('start-solver-button');
+  const forwardButton=document.getElementById('forward-step-button');
+  const calc=document.getElementById('calculated-score-value');
+  startButton.disabled=true; forwardButton.disabled=true;
+  calc.textContent='Calculating…';
+  solverSessionStats={decisions:0,totalNodes:0,duplicates:0,deadBranches:0,limitHits:0};
+  solverActualSeen=new Map(); solverPlan=[]; solverPlanIndex=0; solverPlanResult=null;
+  setStatus('Checking the known 8260 setup combinations first…');
+  document.getElementById('planProgress').textContent='8260 Perfect Score Probe starting…';
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  const perfect=await searchPerfectScore(simClone(state));
+  if(perfect.path){
+    solverPlanResult={statesExamined:perfect.probe.statesExamined,duplicatesSkipped:perfect.probe.duplicatesSkipped,deadBranches:0,solutionsFound:1,perfectCandidates:1,bestCompletedScore:PERFECT_SCORE,bestMoveCount:perfect.path.length,bestResets:0,bestScoreImprovements:1,bestPartialScore:0,limitReached:false,optimalityProven:false,stopReason:perfect.probe.stopReason,searchedDepth:perfect.path.length,perfectSetupSeeds:perfect.probe.setupCount,usedCompleteSolution:true,selectedPathLength:perfect.path.length,selectedFinalScore:PERFECT_SCORE,selectedInventoryUsed:24,selectedPerfectPossible:true,perfectProbe:perfect.probe};
+    solverPlan=perfect.path; updatePlanPanel(solverPlanResult,perfect.probe.stopReason);
+  }else{
+    setStatus(`${perfect.probe.stopReason} Searching up to ${SEARCH_NODE_LIMIT.toLocaleString()} normal full-game scenarios…`);
+    const found=await searchBestPlan();
+    found.result.perfectProbe=perfect.probe; solverPlanResult=found.result; solverPlan=found.path;
+  }
+  solverPlanIndex=0;
+  const complete=!!solverPlanResult?.usedCompleteSolution;
+  const score=complete?solverPlanResult.bestCompletedScore:null;
+  calc.textContent=score!=null?score.toLocaleString():'No solution';
+  startButton.disabled=!solverPlan.length; forwardButton.disabled=!solverPlan.length;
+  if(!solverPlan.length){ setStatus('No playable plan found.'); return; }
+  if(complete) setStatus(`Solution ready: calculated final score ${score.toLocaleString()}. Press Start Solver to play it.`);
+  else setStatus(`No complete solution found. Best partial plan scores ${solverPlanResult.bestPartialScore.toLocaleString()}.`);
+  document.getElementById('planProgress').textContent=`Solution ready — ${solverPlan.length} planned moves. Press Start Solver or use Forward Step.`;
+}
+async function startSolver(){
+  if(solverRunning||state.gameOver||!solverPlan.length) return;
+  solverRunning=true;
+  setStatus(solverPlanResult?.usedCompleteSolution?`Playing calculated solution: ${solverPlanResult.bestCompletedScore.toLocaleString()} points.`:'Playing best partial plan found.');
+  solverLoop();
+}
+function pauseSolver(){ solverRunning=false; }
+
+makePyramid(); loadInitialState();
+document.getElementById('start-solver-button').disabled=true;
+document.getElementById('forward-step-button').disabled=true;
+setTimeout(()=>prepareSolverPlan(),0);
+document.getElementById('draw-button').addEventListener('click',async()=>{ if(state.stockQueue.length){ await previewDraw({position:1,total:1}); draw(); } else { await previewReset(); resetStock(); } });
+document.getElementById('undo-button').addEventListener('click',undo);
+document.getElementById('download-button').addEventListener('click',downloadLog);
+document.getElementById('start-solver-button').addEventListener('click',startSolver);
+document.getElementById('playback-speed').addEventListener('change',e=>{ solverPreviewMs=Number(e.target.value)||1000; });
+document.getElementById('pause-solver-button').addEventListener('click',pauseSolver);
+document.getElementById('forward-step-button').addEventListener('click',async()=>{pauseSolver(); if(solverPlanIndex<solverPlan.length) await executePlannedAction(true);});
+document.getElementById('backward-step-button').addEventListener('click',()=>{pauseSolver(); if(solverPlanIndex<=0||!history.length){setStatus('Already at the start of the calculated solution.');return;} undo(); solverPlanIndex=Math.max(0,solverPlanIndex-1); document.getElementById('planProgress').textContent=`Ready at planned move ${solverPlanIndex} of ${solverPlan.length}.`;});
+</script>
+</body>
+</html>
