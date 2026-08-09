@@ -97,7 +97,7 @@ h1 { text-align:center; margin:0 0 4px; }
   <button id="pause-solver-button">Pause Solver</button>
   <button id="forward-step-button">Forward Step</button>
 </div>
-<div class="solver-note">v0.5 first builds and validates several backward endgame hypotheses, derives a candidate LITP and its pre/post inventory lanes, then runs the dedicated 8260 Perfect Score Probe. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
+<div class="solver-note">v0.6 first reconstructs and simulates each backward endgame hypothesis move-by-move, rejects sequences that cannot physically unfold, derives LITP and lanes from the survivors, then runs the dedicated 8260 Perfect Score Probe. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -140,7 +140,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.5-litp-reasoning';
+const VERSION='Puzzle Pyramid AI JS v0.6-endgame-sequence-sim';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -351,7 +351,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'litp-reasoning-diagnostic-v0.5',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'endgame-sequence-sim-diagnostic-v0.6',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 
@@ -589,31 +589,269 @@ function buildLITPLanes(litp){
     postLaneLabel:`52→${L}`
   };
 }
+function buildEndgameSandbox(plan,s){
+  const n=simClone(s);
+  const preservePyramid=new Set([1,2,3,4,5,6]);
+
+  for(const j of plan.jobs){
+    if(j.partner!==null && j.partner!==undefined && j.partner<29){
+      preservePyramid.add(Number(j.partner));
+    }
+  }
+
+  // Reconstruct a late-game corridor: everything outside the core targets and
+  // explicitly reserved pyramid resources is assumed to have been cleared.
+  for(let id=7;id<=28;id++){
+    if(!preservePyramid.has(id)) n.tileData[id]=null;
+  }
+
+  n.hold=null;
+  n.gameOver=false;
+  n.completionApplied=false;
+  return n;
+}
+
+function inventoryTimelineCheck(execution){
+  const ids=execution.filter(j=>j.kind==='MATCH_INVENTORY').map(j=>Number(j.partner));
+  if(ids.length<2){
+    return {ids,plausible:true,directionChanges:0,forwardJumps:0,notes:[]};
+  }
+
+  let lastDir=0, directionChanges=0, forwardJumps=0;
+  const notes=[];
+
+  for(let i=1;i<ids.length;i++){
+    const delta=ids[i]-ids[i-1];
+    const dir=delta===0?0:(delta>0?1:-1);
+    if(dir>0) forwardJumps++;
+    if(lastDir && dir && dir!==lastDir) directionChanges++;
+    if(dir) lastDir=dir;
+  }
+
+  // One change of direction is easy to explain by finishing one deployment
+  // and moving into another. Repeated zig-zagging demands progressively more
+  // resets/molding and is less believable as a clean endgame corridor.
+  if(directionChanges>1){
+    notes.push(`inventory use zig-zags ${directionChanges} times: ${ids.join('→')}`);
+  }
+  if(forwardJumps>2){
+    notes.push(`inventory requires ${forwardJumps} forward jumps: ${ids.join('→')}`);
+  }
+
+  const plausible=directionChanges<=2 && forwardJumps<=3;
+  return {ids,plausible,directionChanges,forwardJumps,notes};
+}
+
+function simulateEndgameSequence(plan,s){
+  let n=buildEndgameSandbox(plan,s);
+  const execution=structuralExecutionForJobs(plan.jobs);
+  const trace=[];
+  const failures=[];
+  let holdUses=0;
+
+  const fail=(type,job,message)=>{
+    failures.push({type,target:job?.target??null,partner:job?.partner??null,message});
+  };
+
+  for(let step=0;step<execution.length;step++){
+    const j=execution[step];
+
+    // A target can already be gone if it was used as the partner of an earlier
+    // core match. In that case its endgame obligation has already been met.
+    if(n.tileData[j.target]===null){
+      trace.push({step:step+1,status:'ALREADY_CLEARED',label:endgameJobLabel(j,s)});
+      continue;
+    }
+
+    const targetRef={zone:'pyramid',tileId:j.target};
+
+    if(!simPyramidPlayable(n,j.target)){
+      const blockers=(BLOCKERS[j.target]||[]).filter(b=>n.tileData[b]!==null);
+      fail('EXPOSURE',j,`target ${j.target} is still blocked by ${blockers.join(',')}`);
+      break;
+    }
+
+    if(j.kind==='CLEAR_SELF'){
+      const emoji=n.tileData[j.target];
+      if(!UNMATCHED.has(emoji)){
+        fail('PAIR_RULE',j,`target ${j.target} is not an unmatched self-clear tile`);
+        break;
+      }
+      simRemove(n,targetRef);
+      trace.push({step:step+1,status:'PLAYED',label:endgameJobLabel(j,s)});
+      continue;
+    }
+
+    if(j.kind==='MATCH_INVENTORY'){
+      const invRef={zone:'inventory',tileId:j.partner};
+      const targetEmoji=n.tileData[j.target], partnerEmoji=n.tileData[j.partner];
+      if(!partnerEmoji || EMOJI_PAIRS[targetEmoji]!==partnerEmoji){
+        fail('PAIR_RULE',j,`inventory ${j.partner} no longer supplies the complement for target ${j.target}`);
+        break;
+      }
+
+      // Inventory availability itself is evaluated by the timeline check below.
+      // Here we prove the pyramid side of the proposed endgame can unfold.
+      simRemove(n,targetRef);
+      n.tileData[j.partner]=null;
+      const ii=n.inPlay.indexOf(Number(j.partner)); if(ii>=0)n.inPlay.splice(ii,1);
+      const qi=n.stockQueue.indexOf(Number(j.partner)); if(qi>=0)n.stockQueue.splice(qi,1);
+      trace.push({step:step+1,status:'PLAYED',label:endgameJobLabel(j,s)});
+      continue;
+    }
+
+    if(j.kind==='MATCH_PYRAMID'){
+      const p=Number(j.partner);
+      if(!n.tileData[p]){
+        fail('RESOURCE_GONE',j,`pyramid resource ${p} is already gone before target ${j.target}`);
+        break;
+      }
+      if(!simPyramidPlayable(n,p)){
+        const blockers=(BLOCKERS[p]||[]).filter(b=>n.tileData[b]!==null);
+        fail('EXPOSURE',j,`pyramid resource ${p} is still blocked by ${blockers.join(',')}`);
+        break;
+      }
+      const partnerRef={zone:'pyramid',tileId:p};
+      if(!simPair(n,targetRef,partnerRef)){
+        fail('PAIR_RULE',j,`${p} and ${j.target} are not complements at execution time`);
+        break;
+      }
+      simRemove(n,targetRef);
+      simRemove(n,partnerRef);
+      trace.push({step:step+1,status:'PLAYED',label:endgameJobLabel(j,s)});
+      continue;
+    }
+
+    if(j.kind==='MATCH_HELD_DESCENDANT'){
+      const p=Number(j.partner);
+      if(n.hold){
+        fail('HOLD_CONFLICT',j,`Hold is occupied before ${p} can be reserved for target ${j.target}`);
+        break;
+      }
+      if(!n.tileData[p]){
+        fail('RESOURCE_GONE',j,`Hold candidate ${p} is already gone`);
+        break;
+      }
+      if(!simPyramidPlayable(n,p)){
+        const blockers=(BLOCKERS[p]||[]).filter(b=>n.tileData[b]!==null);
+        fail('HOLD_TIMING',j,`Hold candidate ${p} cannot be lifted yet; blocked by ${blockers.join(',')}`);
+        break;
+      }
+
+      const partnerEmoji=n.tileData[p];
+      simRemove(n,{zone:'pyramid',tileId:p});
+      n.hold={emoji:partnerEmoji,sourceId:p,sourceZone:'pyramid'};
+      holdUses++;
+
+      if(!simPyramidPlayable(n,j.target)){
+        const blockers=(BLOCKERS[j.target]||[]).filter(b=>n.tileData[b]!==null);
+        fail('HOLD_TIMING',j,`after holding ${p}, target ${j.target} is still blocked by ${blockers.join(',')}`);
+        break;
+      }
+      if(EMOJI_PAIRS[n.tileData[j.target]]!==n.hold.emoji){
+        fail('PAIR_RULE',j,`held ${p} does not complement target ${j.target}`);
+        break;
+      }
+
+      simRemove(n,targetRef);
+      n.hold=null;
+      trace.push({step:step+1,status:'PLAYED',label:endgameJobLabel(j,s),holdUsed:true});
+      continue;
+    }
+
+    if(j.kind==='UNRESOLVED'){
+      fail('UNRESOLVED',j,`target ${j.target} has no assigned endgame resource`);
+      break;
+    }
+  }
+
+  const timeline=inventoryTimelineCheck(execution);
+  if(!timeline.plausible){
+    for(const note of timeline.notes){
+      failures.push({type:'INVENTORY_TIMELINE',target:null,partner:null,message:note});
+    }
+  }
+
+  const allCoreGone=[1,2,3,4,5,6].every(id=>n.tileData[id]===null);
+  if(!allCoreGone && failures.length===0){
+    const remaining=[1,2,3,4,5,6].filter(id=>n.tileData[id]!==null);
+    failures.push({type:'INCOMPLETE',target:null,partner:null,message:`core tiles remain after simulation: ${remaining.join(',')}`});
+  }
+
+  return {
+    passed:failures.length===0 && allCoreGone,
+    allCoreGone,
+    stepsSimulated:trace.length,
+    holdUses,
+    inventoryTimeline:timeline,
+    failures,
+    trace
+  };
+}
+
 function validateEndgameSequence(plan,s){
-  const reasons=[], execution=structuralExecutionForJobs(plan.jobs), used=new Map();
-  let unresolved=0, holdJobs=0, impossible=0;
+  const reasons=[];
+  const execution=structuralExecutionForJobs(plan.jobs);
+  const used=new Map();
+  let unresolved=0, impossible=0, holdJobs=0;
+
   for(const j of execution){
-    if(j.kind==='UNRESOLVED'){ unresolved++; reasons.push(`target ${j.target} has no assigned complement`); continue; }
+    if(j.kind==='UNRESOLVED'){
+      unresolved++;
+      reasons.push(`target ${j.target} has no assigned complement`);
+      continue;
+    }
     if(j.partner!==null && j.partner!==undefined){
       if(used.has(j.partner)){
         impossible++;
         reasons.push(`resource ${j.partner} is assigned twice`);
       }else used.set(j.partner,j.target);
     }
-    if(j.kind==='MATCH_HELD_DESCENDANT'){
-      holdJobs++;
-      reasons.push(`target ${j.target} requires preserving pyramid ${j.partner} in Hold`);
-    }
+    if(j.kind==='MATCH_HELD_DESCENDANT') holdJobs++;
     if(j.partner<29 && ancestorSet(j.target).has(j.partner)){
       impossible++;
       reasons.push(`pyramid ${j.partner} cannot clear ${j.target} because it is an ancestor`);
     }
   }
-  const holdBurden=Math.max(0,holdJobs-1);
-  const executable=unresolved===0 && impossible===0;
-  const feasibilityScore=Math.max(0,100-unresolved*35-impossible*60-holdBurden*8);
-  return {executable,feasibilityScore,unresolvedJobs:unresolved,hardConflicts:impossible,holdJobs,holdBurden,notes:reasons};
+
+  const simulation=simulateEndgameSequence(plan,s);
+  for(const f of simulation.failures) reasons.push(`${f.type}: ${f.message}`);
+
+  const hardConflicts=impossible + simulation.failures.filter(f=>
+    ['EXPOSURE','RESOURCE_GONE','HOLD_CONFLICT','HOLD_TIMING','PAIR_RULE','UNRESOLVED','INCOMPLETE'].includes(f.type)
+  ).length;
+
+  const timelinePenalty=
+    simulation.inventoryTimeline.directionChanges*8 +
+    simulation.inventoryTimeline.forwardJumps*3;
+
+  const feasibilityScore=Math.max(
+    0,
+    100
+      - unresolved*30
+      - hardConflicts*28
+      - timelinePenalty
+      - Math.max(0,holdJobs-1)*6
+      - (simulation.passed?0:12)
+  );
+
+  // v0.6 changes the meaning of "executable": the reconstructed endgame
+  // corridor must actually play through, not merely consist of legal pairs.
+  const executable=unresolved===0 && impossible===0 && simulation.passed;
+
+  return {
+    executable,
+    feasibilityScore,
+    unresolvedJobs:unresolved,
+    hardConflicts,
+    holdJobs,
+    holdBurden:Math.max(0,holdJobs-1),
+    simulationPassed:simulation.passed,
+    simulation,
+    notes:reasons
+  };
 }
+
 function buildInventoryTargetFromEndgame(plan,s){
   const execution=structuralExecutionForJobs(plan.jobs);
   const inventoryJobs=execution.filter(j=>j.kind==='MATCH_INVENTORY')
@@ -669,7 +907,7 @@ function analyzeEndgamePlans(s){
     next.forEach(p=>{
       const v=validateEndgameSequence(p,s);
       p.validation=v;
-      p.reasonedScore=p.score+v.feasibilityScore*18-v.holdBurden*90;
+      p.reasonedScore=p.score+v.feasibilityScore*22+(v.simulationPassed?900:-1400)-v.holdBurden*90;
     });
     next.sort((a,b)=>b.reasonedScore-a.reasonedScore || b.score-a.score);
     beams=next.slice(0,ENDGAME_BEAM_WIDTH);
@@ -680,7 +918,7 @@ function analyzeEndgamePlans(s){
     const inventoryTarget=buildInventoryTargetFromEndgame(p,s);
     const tile1Job=p.jobs.find(j=>j.target===1)||null;
     const litpBonus=inventoryTarget.litp.determined?140:0;
-    const sequenceScore=p.score+validation.feasibilityScore*18+litpBonus-validation.holdBurden*90;
+    const sequenceScore=p.score+validation.feasibilityScore*22+(validation.simulationPassed?900:-1400)+litpBonus-validation.holdBurden*90;
     return {p,validation,inventoryTarget,tile1Job,sequenceScore};
   }).sort((a,b)=>b.sequenceScore-a.sequenceScore);
 
@@ -714,8 +952,14 @@ function analyzeEndgamePlans(s){
     resourceConflictsPruned:prunedResourceConflicts,
     unresolvedExpansions,
     topCandidateFeasibility:best?.validation?.feasibilityScore??0,
+    topCandidateSimulationPassed:best?.validation?.simulationPassed??false,
     topCandidateHardConflicts:best?.validation?.hardConflicts??null,
     topCandidateUnresolvedJobs:best?.validation?.unresolvedJobs??null,
+    rejectedBySequenceSimulation:expanded.filter(x=>!x.validation.simulationPassed).length,
+    exposureFailures:expanded.reduce((n,x)=>n+x.validation.simulation.failures.filter(f=>f.type==='EXPOSURE').length,0),
+    holdTimingFailures:expanded.reduce((n,x)=>n+x.validation.simulation.failures.filter(f=>f.type==='HOLD_TIMING'||f.type==='HOLD_CONFLICT').length,0),
+    inventoryTimelineFailures:expanded.reduce((n,x)=>n+x.validation.simulation.failures.filter(f=>f.type==='INVENTORY_TIMELINE').length,0),
+    resourceGoneFailures:expanded.reduce((n,x)=>n+x.validation.simulation.failures.filter(f=>f.type==='RESOURCE_GONE').length,0),
     coreTargetsCovered:covered,
     coreTargetCount:ENDGAME_CORE_TARGETS.length,
     coreCoveragePercent:Math.round(covered/ENDGAME_CORE_TARGETS.length*100),
@@ -729,9 +973,9 @@ function analyzeEndgamePlans(s){
 
   return {
     mode:'DIAGNOSTIC_ONLY',
-    plannerVersion:'v0.5-litp-reasoning',
+    plannerVersion:'v0.6-endgame-sequence-sim',
     coreTargets:[...ENDGAME_CORE_TARGETS],
-    explanation:'Uses the complement map exhaustively, reasons about structural likelihood, validates whole core endgame hypotheses, derives a candidate LITP, and splits the inventory around that LITP. The full-plan search is not yet forced to follow the result.',
+    explanation:'Uses the complement map exhaustively, reconstructs a late-game corridor, actually simulates each proposed endgame in order, rejects exposure/Hold/resource/timeline failures, then derives LITP and lanes from the survivors. The full-plan search is not yet forced to follow the result.',
     progressMetrics,
     candidateCount:candidates.length,
     selectedForDisplay:best?.id||null,
@@ -756,7 +1000,7 @@ function renderEndgameAnalysis(a){
   const litp=best.inventoryTarget.litp.determined
     ? `LITP ${best.inventoryTarget.litp.tileId} (${best.inventoryTarget.litp.emoji})`
     : 'LITP not yet determined';
-  summary.textContent=`Diagnostic only — ${t1}. ${litp}. Feasibility ${best.validation.feasibilityScore}/100.`;
+  summary.textContent=`Diagnostic only — ${t1}. ${litp}. Sequence simulation ${best.validation.simulationPassed?'PASS':'FAIL'}; feasibility ${best.validation.feasibilityScore}/100.`;
 
   const lines=best.inventoryTarget.structuralExecution.map((j,i)=>`${i+1}. ${j.label}`);
   const protect=best.inventoryTarget.protectedInventoryIds.length
@@ -768,7 +1012,7 @@ function renderEndgameAnalysis(a){
   const lanes=best.inventoryTarget.lanes.available
     ? `LITP lanes: pre ${best.inventoryTarget.lanes.preLaneLabel}; post ${best.inventoryTarget.lanes.postLaneLabel}`
     : 'LITP lanes unavailable.';
-  const metrics=`Progress: complement options ${m.totalComplementOptions}; executable candidates ${m.executableCandidates}; conflicts pruned ${m.resourceConflictsPruned}; core coverage ${m.coreCoveragePercent}%.`;
+  const metrics=`Progress: complement options ${m.totalComplementOptions}; sequence rejects ${m.rejectedBySequenceSimulation}; executable candidates ${m.executableCandidates}; exposure failures ${m.exposureFailures}; Hold failures ${m.holdTimingFailures}; inventory-timeline failures ${m.inventoryTimelineFailures}; core coverage ${m.coreCoveragePercent}%.`;
   body.textContent=`Top reasoned endgame (earlier → later):\n${lines.join('\n')}\n${protect}\n${holds}\n${lanes}\n${metrics}`;
 }
 
