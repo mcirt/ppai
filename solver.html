@@ -135,7 +135,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.1';
+const VERSION='Puzzle Pyramid AI JS v0.2-wave';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -346,7 +346,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT},solverSessionStats,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'wave-aware-v0.2',inventoryWave:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 
@@ -447,13 +447,84 @@ function holdQuality(s){
   const h={zone:'hold',tileId:'h'}; const refs=simPlayableRefs(s).filter(r=>r.zone!=='hold');
   return refs.some(r=>simPair(s,h,r))?35:-10;
 }
+
+// --- v0.2 inventory-wave strategy helpers ---------------------------------
+// These are deliberately cheap heuristics. They do not replace the search;
+// they teach the search to value states that shape the next inventory wave.
+function buriedInventoryIds(s,limit=9){
+  return [...s.inPlay].sort((a,b)=>b-a).slice(0,limit);
+}
+function holdInventoryAlignment(s){
+  if(!s.hold) return 0;
+  const need=EMOJI_PAIRS[s.hold.emoji];
+  if(!need) return 0;
+  const lane=buriedInventoryIds(s,6);
+  for(let i=0;i<lane.length;i++){
+    if(s.tileData[lane[i]]===need){
+      // Strongest when the held tile is aimed at the next buried Z.
+      return Math.max(0,220-i*45);
+    }
+  }
+  return 0;
+}
+function inventoryWavePotential(s){
+  let value=0;
+  const exposed=[];
+  for(let i=1;i<=28;i++) if(s.tileData[i]&&simPyramidPlayable(s,i)) exposed.push(s.tileData[i]);
+  const exposedSet=new Set(exposed);
+  const current=buriedInventoryIds(s,6);
+  current.forEach((id,i)=>{
+    const emoji=s.tileData[id]; if(!emoji)return;
+    if(UNMATCHED.has(emoji)) value+=Math.max(20,95-i*12);
+    else if(exposedSet.has(EMOJI_PAIRS[emoji])) value+=Math.max(15,85-i*10);
+    if(s.hold && EMOJI_PAIRS[s.hold.emoji]===emoji) value+=Math.max(30,150-i*25);
+  });
+  // Preview the Z of the next two draw groups. This is only a forecast;
+  // the exact lane can still change as cards are removed or held.
+  for(let start=0,group=0; start<s.stockQueue.length && group<2; start+=3,group++){
+    const trio=s.stockQueue.slice(start,start+3);
+    const z=trio[trio.length-1], emoji=z?s.tileData[z]:null;
+    if(!emoji)continue;
+    if(UNMATCHED.has(emoji)||exposedSet.has(EMOJI_PAIRS[emoji])) value+=55-group*15;
+    if(s.hold && EMOJI_PAIRS[s.hold.emoji]===emoji) value+=80-group*20;
+  }
+  return value;
+}
+function holdHasNearInventoryJob(s){
+  return holdInventoryAlignment(s)>=130;
+}
+function roadblockSnapshot(s,label=''){
+  const refs=simPlayableRefs(s);
+  const needs=[];
+  for(const r of refs){
+    const emoji=simEmojiOf(s,r); if(!emoji||UNMATCHED.has(emoji))continue;
+    needs.push({tile:r.zone==='hold'?'H':Number(r.tileId),zone:r.zone,emoji,needs:EMOJI_PAIRS[emoji]||null});
+  }
+  return {
+    label,
+    score:s.score,
+    streak:s.streak,
+    clearedPyramid:clearedPyramidCount(s),
+    inventoryUsed:inventoryUsedCount(s),
+    resetsUsed:s.resetsUsed||0,
+    hold:s.hold?{emoji:s.hold.emoji,sourceId:s.hold.sourceId}:null,
+    currentZ:simCurrentZId(s),
+    topInventory:buriedInventoryIds(s,6).map(id=>({id,emoji:s.tileData[id]})),
+    exposedNeeds:needs,
+    immediateScoringMoves:immediateScoringCount(s),
+    wavePotential:inventoryWavePotential(s),
+    holdInventoryAlignment:holdInventoryAlignment(s)
+  };
+}
 function evaluateState(s){
   const invUsed=inventoryUsedCount(s), cleared=clearedPyramidCount(s), exposed=exposedPyramidCount(s), scoring=immediateScoringCount(s);
   if(s.gameOver){
     const perfect=(s.score===PERFECT_SCORE && invUsed===24)?5000000:0;
     return 3000000 + perfect + s.score*1000 + invUsed*5000 - (s.resetsUsed||0)*500;
   }
-  return s.score*12 + cleared*900 + invUsed*260 + exposed*55 + scoring*100 + s.streak*75 + holdQuality(s) - (s.resetsUsed||0)*140;
+  const wave=inventoryWavePotential(s), alignment=holdInventoryAlignment(s);
+  return s.score*12 + cleared*900 + invUsed*260 + exposed*55 + scoring*100 + s.streak*75 + holdQuality(s)
+    + wave*2.2 + alignment*2.8 - (s.resetsUsed||0)*140;
 }
 function structuralStateKey(s,includeDepth='',includeResets=true){
   const pyramid=[]; for(let i=1;i<=28;i++) pyramid.push(s.tileData[i]||'-');
@@ -474,6 +545,26 @@ function quickActionBias(s,action,next){
   b+=(clearedPyramidCount(next)-clearedPyramidCount(s))*100;
   b+=(exposedPyramidCount(next)-exposedPyramidCount(s))*70;
   b+=(inventoryUsedCount(next)-inventoryUsedCount(s))*90;
+
+  // Inventory molding: prefer spending Hold into the inventory lane when it
+  // advances Z, and be cautious about spending a Hold on the pyramid when
+  // that Hold already has a near-term buried-inventory job.
+  if(action.type==='MATCH_HOLD'){
+    const other=action.a.zone==='hold'?action.b:action.a;
+    if(other.zone==='inventory') b+=360;
+    else if(other.zone==='pyramid' && holdHasNearInventoryJob(s)) b-=280;
+  }
+  if(action.type==='HOLD'){
+    const gain=holdInventoryAlignment(next)-holdInventoryAlignment(s);
+    b+=gain*1.5;
+  }
+  // A setup draw is less undesirable when it materially improves the future
+  // inventory wave, especially before the streak has become valuable.
+  if(action.type==='DRAW'){
+    const gain=inventoryWavePotential(next)-inventoryWavePotential(s);
+    if(s.streak<=3) b+=Math.max(-60,Math.min(220,gain*1.2));
+  }
+  b+=(inventoryWavePotential(next)-inventoryWavePotential(s))*0.8;
   if(next.gameOver)b+=1000000;
   return b;
 }
@@ -678,7 +769,9 @@ function betterCompleted(a,b){
 function planRank(node){
   const s=node.state, cleared=clearedPyramidCount(s), inv=inventoryUsedCount(s);
   if(s.gameOver)return evaluateState(s);
-  return cleared*42000 + inv*12000 + s.score*30 + s.streak*160 + exposedPyramidCount(s)*500 + immediateScoringCount(s)*450 - (s.resetsUsed||0)*1000 - node.path.length*3;
+  const wave=inventoryWavePotential(s), alignment=holdInventoryAlignment(s);
+  return cleared*42000 + inv*12000 + s.score*30 + s.streak*160 + exposedPyramidCount(s)*500 + immediateScoringCount(s)*450
+    + wave*65 + alignment*95 - (s.resetsUsed||0)*1000 - node.path.length*3;
 }
 function updatePlanPanel(result,progressText=''){
   document.getElementById('planStates').textContent=(result?.statesExamined||0).toLocaleString();
@@ -729,19 +822,30 @@ function perfectProbeRank(node){
   if(s.gameOver) return (s.score===PERFECT_SCORE && inventoryUsedCount(s)===24) ? 1e15 : -1e15;
   const cleared=clearedPyramidCount(s), inv=inventoryUsedCount(s);
   const progress=cleared+inv;
-  return progress*1000000 + s.streak*250000 + s.score*100 + exposedPyramidCount(s)*2500 + immediateScoringCount(s)*1800 - node.path.length*5;
+  return progress*1000000 + s.streak*250000 + s.score*100 + exposedPyramidCount(s)*2500 + immediateScoringCount(s)*1800
+    + inventoryWavePotential(s)*700 + holdInventoryAlignment(s)*900 - node.path.length*5;
 }
 async function searchPerfectScore(initial){
   const seeds=buildPerfectSetupSeeds(initial);
-  const probe={checked:true,setupsTested:0,setupCount:seeds.length,statesExamined:0,duplicatesSkipped:0,found:false,winningSetup:null,pathLength:null,score:null,inventoryUsed:0,stopReason:''};
+  const probe={checked:true,setupsTested:0,setupCount:seeds.length,statesExamined:0,duplicatesSkipped:0,found:false,winningSetup:null,pathLength:null,score:null,inventoryUsed:0,stopReason:'',bestNearPerfect:null,roadblock:null,repairSeeds:[]};
+  let bestNear=null;
+  const repairSeeds=[];
   for(const seed of seeds){
     probe.setupsTested++;
-    let frontier=[{state:seed.state,path:seed.path,rank:perfectProbeRank({state:seed.state,path:seed.path})}];
+    let frontier=[{state:seed.state,path:seed.path,rank:perfectProbeRank({state:seed.state,path:seed.path}),seedLabel:seed.seedLabel}];
     const seen=new Map([[planStateKey(seed.state),seed.state.score]]);
     for(let depth=0; depth<PERFECT_PROBE_MAX_DEPTH && frontier.length && probe.statesExamined<PERFECT_PROBE_NODE_LIMIT; depth++){
       const nextNodes=[];
       for(const node of frontier){
+        const progress=clearedPyramidCount(node.state)+inventoryUsedCount(node.state);
+        const candidateRank=progress*10000 + node.state.streak*100 + inventoryWavePotential(node.state);
+        if(!bestNear || candidateRank>bestNear.candidateRank){
+          bestNear={state:node.state,path:node.path,seedLabel:seed.seedLabel,candidateRank};
+        }
         const actions=perfectProbeActions(node.state);
+        if(!actions.length && node.state.streak>0){
+          repairSeeds.push({state:node.state,path:node.path,seedLabel:`roadblock: ${seed.seedLabel}`,rank:planRank({state:node.state,path:node.path})});
+        }
         for(const action of actions){
           if(probe.statesExamined>=PERFECT_PROBE_NODE_LIMIT) break;
           probe.statesExamined++;
@@ -760,7 +864,7 @@ async function searchPerfectScore(initial){
           const key=planStateKey(next), prev=seen.get(key);
           if(prev!==undefined && prev>=next.score){ probe.duplicatesSkipped++; continue; }
           seen.set(key,next.score);
-          nextNodes.push({state:next,path,rank:perfectProbeRank({state:next,path})});
+          nextNodes.push({state:next,path,rank:perfectProbeRank({state:next,path}),seedLabel:seed.seedLabel});
         }
         if(probe.statesExamined>=PERFECT_PROBE_NODE_LIMIT) break;
       }
@@ -769,18 +873,37 @@ async function searchPerfectScore(initial){
       document.getElementById('planProgress').textContent=`8260 probe: setup ${probe.setupsTested}/${probe.setupCount} (${seed.seedLabel}); ${probe.statesExamined.toLocaleString()} states checked.`;
       await new Promise(r=>setTimeout(r,0));
     }
+    // Preserve a few strong states where the perfect attempt ran out of runway.
+    frontier.slice(0,2).forEach(node=>repairSeeds.push({state:node.state,path:node.path,seedLabel:`near-perfect: ${seed.seedLabel}`,rank:planRank({state:node.state,path:node.path})}));
     if(probe.statesExamined>=PERFECT_PROBE_NODE_LIMIT) break;
   }
+  if(bestNear){
+    probe.bestNearPerfect={seed:bestNear.seedLabel,pathLength:bestNear.path.length,score:bestNear.state.score,streak:bestNear.state.streak,clearedPyramid:clearedPyramidCount(bestNear.state),inventoryUsed:inventoryUsedCount(bestNear.state)};
+    probe.roadblock=roadblockSnapshot(bestNear.state,bestNear.seedLabel);
+  }
+  // Deduplicate and keep a small set of repair starting points for the full-plan search.
+  const repairSeen=new Set();
+  probe.repairSeeds=repairSeeds.sort((a,b)=>b.rank-a.rank).filter(x=>{const k=planStateKey(x.state);if(repairSeen.has(k))return false;repairSeen.add(k);return true;}).slice(0,8).map(x=>({state:x.state,path:x.path,seedLabel:x.seedLabel,rank:x.rank}));
   probe.stopReason=probe.statesExamined>=PERFECT_PROBE_NODE_LIMIT
-    ? `8260 probe reached its ${PERFECT_PROBE_NODE_LIMIT.toLocaleString()}-state limit without finding a perfect route; continuing with normal solver.`
-    : 'Known 8260 setup family checked; no perfect route found. Continuing with normal solver.';
+    ? `8260 probe reached its ${PERFECT_PROBE_NODE_LIMIT.toLocaleString()}-state limit without finding a perfect route; roadblock data preserved for repair search.`
+    : 'Known 8260 setup family checked; no perfect route found. Roadblock data preserved for repair search.';
   return {probe,path:null,state:null};
 }
-async function searchBestPlan(){
+async function searchBestPlan(perfectProbe=null){
   const initial=simClone(state);
   const result={statesExamined:0,duplicatesSkipped:0,deadBranches:0,solutionsFound:0,perfectCandidates:0,bestCompletedScore:null,bestMoveCount:null,bestResets:null,bestScoreImprovements:0,bestPartialScore:initial.score,limitReached:false,optimalityProven:false,stopReason:'',searchedDepth:0,perfectSetupSeeds:0};
   const perfectSeeds=buildPerfectSetupSeeds(initial); result.perfectSetupSeeds=perfectSeeds.length;
-  let frontier=[{state:initial,path:[],rank:planRank({state:initial,path:[]}),seedLabel:'general'}];
+  const repairSeeds=(perfectProbe?.repairSeeds||[]).map(x=>({state:simClone(x.state),path:x.path,rank:x.rank,seedLabel:x.seedLabel}));
+  // v0.2: do not make draw-heavy setup states compete with scored states before
+  // they have a chance to mature. Seed the normal beam with all known 8260
+  // setup families plus the best roadblock states from the failed perfect probe.
+  let frontier=[
+    {state:initial,path:[],rank:planRank({state:initial,path:[]}),seedLabel:'general'},
+    ...perfectSeeds,
+    ...repairSeeds
+  ];
+  result.repairSeedsUsed=repairSeeds.length;
+  result.roadblock=perfectProbe?.roadblock||null;
   let bestComplete=null;
   let bestPartial={state:initial,path:[],rank:planRank({state:initial,path:[]})};
   const seen=new Map(); frontier.forEach(n=>{const k=planStateKey(n.state),p=seen.get(k); if(p===undefined||n.state.score>p)seen.set(k,n.state.score);});
@@ -940,7 +1063,7 @@ async function prepareSolverPlan(){
     solverPlan=perfect.path; updatePlanPanel(solverPlanResult,perfect.probe.stopReason);
   }else{
     setStatus(`${perfect.probe.stopReason} Searching up to ${SEARCH_NODE_LIMIT.toLocaleString()} normal full-game scenarios…`);
-    const found=await searchBestPlan();
+    const found=await searchBestPlan(perfect.probe);
     found.result.perfectProbe=perfect.probe; solverPlanResult=found.result; solverPlan=found.path;
   }
   solverPlanIndex=0;
