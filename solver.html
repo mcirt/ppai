@@ -135,7 +135,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.2-wave';
+const VERSION='Puzzle Pyramid AI JS v0.3-post-reset';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -346,7 +346,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'wave-aware-v0.2',inventoryWave:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'post-reset-molding-v0.3',inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 
@@ -448,7 +448,7 @@ function holdQuality(s){
   return refs.some(r=>simPair(s,h,r))?35:-10;
 }
 
-// --- v0.2 inventory-wave strategy helpers ---------------------------------
+// --- v0.2 current-deployment inventory-wave strategy helpers ---------------------------------
 // These are deliberately cheap heuristics. They do not replace the search;
 // they teach the search to value states that shape the next inventory wave.
 function buriedInventoryIds(s,limit=9){
@@ -490,6 +490,110 @@ function inventoryWavePotential(s){
   }
   return value;
 }
+// --- v0.3 post-reset inventory molding -------------------------------------
+// Puzzle Pyramid inventory molding is often aimed at the NEXT deployment.
+// The surviving inventory compresses after RESET, so the static Z positions
+// 31,34,37,... change whenever inventory tiles are removed during setup.
+function remainingInventoryIds(s){
+  const ids=[];
+  for(let id=29;id<=52;id++) if(s.tileData[id]!==null) ids.push(id);
+  return ids;
+}
+function baselineDeploymentZIds(){
+  const z=[];
+  for(let id=31;id<=52;id+=3) z.push(id);
+  return z;
+}
+function postResetGroups(s){
+  const ids=remainingInventoryIds(s);
+  const groups=[];
+  for(let i=0;i<ids.length;i+=3){
+    const members=ids.slice(i,i+3);
+    if(!members.length) continue;
+    const z=members[members.length-1];
+    groups.push({
+      deploymentIndex:groups.length+1,
+      members,
+      z,
+      emoji:s.tileData[z]||null
+    });
+  }
+  return groups;
+}
+function futureTargetValue(s,emoji){
+  if(!emoji) return 0;
+  if(UNMATCHED.has(emoji)) return 180;
+  const needed=EMOJI_PAIRS[emoji];
+  if(!needed) return 0;
+
+  let playable=0, remaining=0;
+  for(let id=1;id<=28;id++){
+    if(s.tileData[id]!==needed) continue;
+    remaining++;
+    if(simPyramidPlayable(s,id)) playable++;
+  }
+
+  let value=playable*115 + Math.min(remaining,4)*32;
+  if(s.hold && s.hold.emoji===needed) value+=145;
+  return value;
+}
+function nextDeploymentProfile(s){
+  const groups=postResetGroups(s);
+  let score=0, usefulRun=0, longestUsefulRun=0;
+  const zIds=[], zEmojis=[], utilities=[];
+
+  groups.forEach((g,i)=>{
+    const utility=futureTargetValue(s,g.emoji);
+    zIds.push(g.z);
+    zEmojis.push(g.emoji);
+    utilities.push(utility);
+
+    // Earlier post-reset groups matter a little more because they are easier
+    // to reach without burning extra setup draws.
+    const earlyWeight=Math.max(.68,1-i*.045);
+    score+=utility*earlyWeight;
+
+    if(utility>=95){
+      usefulRun++;
+      longestUsefulRun=Math.max(longestUsefulRun,usefulRun);
+    }else{
+      usefulRun=0;
+    }
+  });
+
+  // Reward a deployment whose projected Zs provide several useful launch
+  // points instead of one isolated hit.
+  score+=longestUsefulRun*95;
+
+  return {
+    score:Math.round(score),
+    survivorCount:remainingInventoryIds(s).length,
+    baselineZIds:baselineDeploymentZIds(),
+    projectedZIds:zIds,
+    projectedZEmojis:zEmojis,
+    utilities,
+    longestUsefulRun,
+    groups
+  };
+}
+function nextDeploymentPotential(s){
+  return nextDeploymentProfile(s).score;
+}
+function nextDeploymentShift(before,after){
+  const a=nextDeploymentProfile(before), b=nextDeploymentProfile(after);
+  const changed=a.projectedZIds.join(',')!==b.projectedZIds.join(',');
+  return {
+    changed,
+    delta:b.score-a.score,
+    before:a,
+    after:b
+  };
+}
+function postResetLaunchBonus(s){
+  const p=nextDeploymentProfile(s);
+  return p.longestUsefulRun*90 + Math.min(500,p.score*.18);
+}
+
 function holdHasNearInventoryJob(s){
   return holdInventoryAlignment(s)>=130;
 }
@@ -513,7 +617,8 @@ function roadblockSnapshot(s,label=''){
     exposedNeeds:needs,
     immediateScoringMoves:immediateScoringCount(s),
     wavePotential:inventoryWavePotential(s),
-    holdInventoryAlignment:holdInventoryAlignment(s)
+    holdInventoryAlignment:holdInventoryAlignment(s),
+    nextDeployment:nextDeploymentProfile(s)
   };
 }
 function evaluateState(s){
@@ -522,9 +627,10 @@ function evaluateState(s){
     const perfect=(s.score===PERFECT_SCORE && invUsed===24)?5000000:0;
     return 3000000 + perfect + s.score*1000 + invUsed*5000 - (s.resetsUsed||0)*500;
   }
-  const wave=inventoryWavePotential(s), alignment=holdInventoryAlignment(s);
+  const wave=inventoryWavePotential(s), alignment=holdInventoryAlignment(s), nextDeployment=nextDeploymentPotential(s);
   return s.score*12 + cleared*900 + invUsed*260 + exposed*55 + scoring*100 + s.streak*75 + holdQuality(s)
-    + wave*2.2 + alignment*2.8 - (s.resetsUsed||0)*140;
+    + wave*2.2 + alignment*2.8 + nextDeployment*1.35 + postResetLaunchBonus(s)
+    - (s.resetsUsed||0)*140;
 }
 function structuralStateKey(s,includeDepth='',includeResets=true){
   const pyramid=[]; for(let i=1;i<=28;i++) pyramid.push(s.tileData[i]||'-');
@@ -564,6 +670,25 @@ function quickActionBias(s,action,next){
     const gain=inventoryWavePotential(next)-inventoryWavePotential(s);
     if(s.streak<=3) b+=Math.max(-60,Math.min(220,gain*1.2));
   }
+
+  // v0.3: reward setup actions for the inventory shape they CREATE AFTER RESET.
+  // Removing or holding an inventory tile compresses all later survivors and
+  // can move entirely different tiles onto the future Z positions.
+  const deploymentShift=nextDeploymentShift(s,next);
+  if(deploymentShift.changed){
+    b+=Math.max(-420,Math.min(620,deploymentShift.delta*1.15));
+    if(deploymentShift.after.longestUsefulRun>deploymentShift.before.longestUsefulRun){
+      b+=(deploymentShift.after.longestUsefulRun-deploymentShift.before.longestUsefulRun)*180;
+    }
+  }
+
+  // When RESET becomes legal, do not judge it only as a 50-point penalty.
+  // A deliberately molded next deployment can justify paying that cost.
+  if(action.type==='RESET'){
+    const launch=postResetLaunchBonus(s);
+    b+=Math.min(520,launch*.75);
+  }
+
   b+=(inventoryWavePotential(next)-inventoryWavePotential(s))*0.8;
   if(next.gameOver)b+=1000000;
   return b;
@@ -612,6 +737,17 @@ function explainCandidate(before,action,after){
   if(action.type==='HOLD') reasons.push('setup move; preserves tile without breaking streak');
   if(action.type==='DRAW') reasons.push(`breaks streak ${before.streak}→0`);
   if(action.type==='RESET') reasons.push('costs 50 points and starts a new inventory pass');
+  const deploymentShift=nextDeploymentShift(before,after);
+  if(deploymentShift.changed){
+    const a=deploymentShift.before.projectedZIds.slice(0,5).join(',');
+    const b=deploymentShift.after.projectedZIds.slice(0,5).join(',');
+    const sign=deploymentShift.delta>=0?'+':'';
+    reasons.push(`reshapes next-reset Zs ${a} → ${b} (${sign}${deploymentShift.delta} deployment value)`);
+  }
+  if(action.type==='RESET'){
+    const p=nextDeploymentProfile(before);
+    reasons.push(`launches molded deployment Zs ${p.projectedZIds.slice(0,6).join(',')}`);
+  }
   const future=immediateScoringCount(after); if(future>0) reasons.push(`${future} immediate scoring option${future===1?'':'s'} remain`);
   if(after.gameOver) reasons.push('finishes the puzzle');
   return reasons.join('; ')||'legal move';
@@ -769,9 +905,10 @@ function betterCompleted(a,b){
 function planRank(node){
   const s=node.state, cleared=clearedPyramidCount(s), inv=inventoryUsedCount(s);
   if(s.gameOver)return evaluateState(s);
-  const wave=inventoryWavePotential(s), alignment=holdInventoryAlignment(s);
+  const wave=inventoryWavePotential(s), alignment=holdInventoryAlignment(s), nextDeployment=nextDeploymentPotential(s);
   return cleared*42000 + inv*12000 + s.score*30 + s.streak*160 + exposedPyramidCount(s)*500 + immediateScoringCount(s)*450
-    + wave*65 + alignment*95 - (s.resetsUsed||0)*1000 - node.path.length*3;
+    + wave*65 + alignment*95 + nextDeployment*42 + postResetLaunchBonus(s)*28
+    - (s.resetsUsed||0)*1000 - node.path.length*3;
 }
 function updatePlanPanel(result,progressText=''){
   document.getElementById('planStates').textContent=(result?.statesExamined||0).toLocaleString();
@@ -823,7 +960,9 @@ function perfectProbeRank(node){
   const cleared=clearedPyramidCount(s), inv=inventoryUsedCount(s);
   const progress=cleared+inv;
   return progress*1000000 + s.streak*250000 + s.score*100 + exposedPyramidCount(s)*2500 + immediateScoringCount(s)*1800
-    + inventoryWavePotential(s)*700 + holdInventoryAlignment(s)*900 - node.path.length*5;
+    + inventoryWavePotential(s)*700 + holdInventoryAlignment(s)*900
+    + nextDeploymentPotential(s)*420 + postResetLaunchBonus(s)*250
+    - node.path.length*5;
 }
 async function searchPerfectScore(initial){
   const seeds=buildPerfectSetupSeeds(initial);
@@ -838,7 +977,8 @@ async function searchPerfectScore(initial){
       const nextNodes=[];
       for(const node of frontier){
         const progress=clearedPyramidCount(node.state)+inventoryUsedCount(node.state);
-        const candidateRank=progress*10000 + node.state.streak*100 + inventoryWavePotential(node.state);
+        const candidateRank=progress*10000 + node.state.streak*100 + inventoryWavePotential(node.state)
+          + nextDeploymentPotential(node.state)*4 + postResetLaunchBonus(node.state)*2;
         if(!bestNear || candidateRank>bestNear.candidateRank){
           bestNear={state:node.state,path:node.path,seedLabel:seed.seedLabel,candidateRank};
         }
@@ -894,7 +1034,7 @@ async function searchBestPlan(perfectProbe=null){
   const result={statesExamined:0,duplicatesSkipped:0,deadBranches:0,solutionsFound:0,perfectCandidates:0,bestCompletedScore:null,bestMoveCount:null,bestResets:null,bestScoreImprovements:0,bestPartialScore:initial.score,limitReached:false,optimalityProven:false,stopReason:'',searchedDepth:0,perfectSetupSeeds:0};
   const perfectSeeds=buildPerfectSetupSeeds(initial); result.perfectSetupSeeds=perfectSeeds.length;
   const repairSeeds=(perfectProbe?.repairSeeds||[]).map(x=>({state:simClone(x.state),path:x.path,rank:x.rank,seedLabel:x.seedLabel}));
-  // v0.2: do not make draw-heavy setup states compete with scored states before
+  // v0.3: do not make draw-heavy setup states compete with scored states before
   // they have a chance to mature. Seed the normal beam with all known 8260
   // setup families plus the best roadblock states from the failed perfect probe.
   let frontier=[
