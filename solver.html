@@ -97,7 +97,7 @@ h1 { text-align:center; margin:0 0 4px; }
   <button id="pause-solver-button">Pause Solver</button>
   <button id="forward-step-button">Forward Step</button>
 </div>
-<div class="solver-note">v1.5 first runs a dedicated 8260 Perfect Score Probe against the known setup family. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
+<div class="solver-note">v0.4 first builds several backward endgame hypotheses from Tile 1, then runs the dedicated 8260 Perfect Score Probe against the known setup family. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -120,6 +120,11 @@ h1 { text-align:center; margin:0 0 4px; }
   <div id="planStatus" class="plan-status">No full-plan search run yet.</div>
   <div id="planProgress" class="plan-progress"></div>
 </div>
+<div class="plan-summary" id="endgamePanel">
+  <h2>Endgame-First Analysis</h2>
+  <div id="endgameSummary" class="plan-status">Analyzing how Tile 1 can be cleared…</div>
+  <div id="endgameCandidates" class="plan-progress"></div>
+</div>
 <div id="status" class="status">Use Start Solver, or step through one legal move at a time.</div>
 <div class="thought-panel">
   <h2>Solver Decision Explorer</h2>
@@ -135,7 +140,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.3-post-reset';
+const VERSION='Puzzle Pyramid AI JS v0.4-endgame-first';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -346,7 +351,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'post-reset-molding-v0.3',inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'endgame-first-diagnostic-v0.4',endgamePlanner:true,endgamePlannerMode:'diagnostic',inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 
@@ -367,6 +372,7 @@ let pendingSolverMeta=null;
 let solverPlan=[];
 let solverPlanIndex=0;
 let solverPlanResult=null;
+let solverEndgameAnalysis=null;
 let executingPlannedAction=false;
 
 function simClone(s){ return JSON.parse(JSON.stringify(s)); }
@@ -447,6 +453,235 @@ function holdQuality(s){
   const h={zone:'hold',tileId:'h'}; const refs=simPlayableRefs(s).filter(r=>r.zone!=='hold');
   return refs.some(r=>simPair(s,h,r))?35:-10;
 }
+
+
+// --- v0.4 endgame-first diagnostic planner ---------------------------------
+// This first version is deliberately diagnostic: it generates several
+// competing endgame hypotheses before the normal search runs, but it does not
+// force the search to obey one yet. That lets us validate the deductions first.
+const ENDGAME_CORE_TARGETS=[1,2,3,4,5,6];
+const ENDGAME_BEAM_WIDTH=24;
+const ENDGAME_KEEP_CANDIDATES=8;
+
+function blockerClosure(id){
+  const seen=new Set(), stack=[...(BLOCKERS[id]||[])];
+  while(stack.length){
+    const n=stack.pop();
+    if(seen.has(n)) continue;
+    seen.add(n);
+    for(const b of (BLOCKERS[n]||[])) stack.push(b);
+  }
+  return seen;
+}
+function ancestorSet(id){
+  const out=new Set();
+  for(let t=1;t<=28;t++) if(blockerClosure(t).has(id)) out.add(t);
+  return out;
+}
+function endgameDepthMap(){
+  const depth={1:0}, q=[1];
+  while(q.length){
+    const t=q.shift();
+    for(const b of (BLOCKERS[t]||[])){
+      if(depth[b]===undefined || depth[b]>depth[t]+1){
+        depth[b]=depth[t]+1; q.push(b);
+      }
+    }
+  }
+  return depth;
+}
+const ENDGAME_DEPTH=endgameDepthMap();
+
+function endgamePartnerOptions(s,target){
+  const emoji=s.tileData[target];
+  if(!emoji) return [];
+  if(UNMATCHED.has(emoji)){
+    return [{
+      target,kind:'CLEAR_SELF',partner:null,score:900,
+      reason:`tile ${target} is unmatched and can clear itself once exposed`
+    }];
+  }
+  const need=EMOJI_PAIRS[emoji];
+  if(!need) return [];
+
+  const descendants=blockerClosure(target);
+  const ancestors=ancestorSet(target);
+  const core=new Set(ENDGAME_CORE_TARGETS);
+  const options=[];
+
+  for(let id=1;id<=52;id++){
+    if(id===target || s.tileData[id]!==need) continue;
+
+    if(id>=29){
+      // Lower inventory IDs receive a mild preference for late-game jobs:
+      // they are natural candidates to preserve through earlier deployments.
+      let score=430+(53-id)*5;
+      if(target<=3) score+=120;
+      options.push({
+        target,kind:'MATCH_INVENTORY',partner:id,score,
+        reason:`inventory ${id} supplies ${need}; preserving it creates a concrete late-game job`
+      });
+      continue;
+    }
+
+    // An ancestor cannot be used to clear its own prerequisite target: it
+    // cannot become playable until the target is already gone.
+    if(ancestors.has(id)) continue;
+
+    if(descendants.has(id)){
+      // A descendant can still become a late resource if it is removed into
+      // Hold earlier. This is exactly the pattern used by plays such as 23→Hold
+      // and later Hold+4.
+      const score=650;
+      options.push({
+        target,kind:'MATCH_HELD_DESCENDANT',partner:id,score,
+        requiresHold:true,
+        reason:`pyramid ${id} is below tile ${target}; it can only survive for this job if reserved in Hold`
+      });
+    }else{
+      let score=760;
+      if(core.has(id)) score+=500; // co-clears another core prerequisite.
+      options.push({
+        target,kind:'MATCH_PYRAMID',partner:id,score,
+        reason:core.has(id)
+          ? `pyramid ${id} also belongs to the core Tile-1 dependency corridor, so one match can satisfy two jobs`
+          : `pyramid ${id} can pair with tile ${target} without lying underneath it`
+      });
+    }
+  }
+
+  return options.sort((a,b)=>b.score-a.score || (a.partner??999)-(b.partner??999)).slice(0,12);
+}
+function endgameJobLabel(job,s){
+  const e=s.tileData[job.target];
+  if(job.kind==='CLEAR_SELF') return `CLEAR ${job.target} (${e})`;
+  const pe=s.tileData[job.partner];
+  if(job.kind==='MATCH_HELD_DESCENDANT') return `HOLD ${job.partner} (${pe}) → later MATCH_HOLD with ${job.target} (${e})`;
+  return `${job.partner} (${pe}) + ${job.target} (${e})`;
+}
+function buildInventoryTargetFromEndgame(plan,s){
+  const depth=ENDGAME_DEPTH;
+  const execution=[...plan.jobs].sort((a,b)=>{
+    const da=depth[a.target]??99, db=depth[b.target]??99;
+    return db-da || b.target-a.target;
+  });
+  const inventoryJobs=execution
+    .filter(j=>j.kind==='MATCH_INVENTORY')
+    .map(j=>({tileId:j.partner,emoji:s.tileData[j.partner],clearsTarget:j.target,targetEmoji:s.tileData[j.target]}));
+  return {
+    protectedInventoryIds:[...new Set(inventoryJobs.map(x=>x.tileId))].sort((a,b)=>a-b),
+    lateInventoryJobs:inventoryJobs,
+    holdReservations:plan.jobs
+      .filter(j=>j.kind==='MATCH_HELD_DESCENDANT')
+      .map(j=>({tileId:j.partner,emoji:s.tileData[j.partner],futureTarget:j.target})),
+    structuralExecution:execution.map(j=>({
+      target:j.target,kind:j.kind,partner:j.partner,
+      label:endgameJobLabel(j,s)
+    }))
+  };
+}
+function analyzeEndgamePlans(s){
+  let beams=[{score:0,jobs:[],usedResources:new Set(),coCleared:new Set()}];
+
+  for(const target of ENDGAME_CORE_TARGETS){
+    const next=[];
+    for(const beam of beams){
+      if(beam.coCleared.has(target)){
+        next.push(beam);
+        continue;
+      }
+      const options=endgamePartnerOptions(s,target);
+      if(!options.length){
+        next.push({
+          ...beam,
+          score:beam.score-1200,
+          jobs:[...beam.jobs,{target,kind:'UNRESOLVED',partner:null,score:-1200,reason:'no structural clearing resource found'}]
+        });
+        continue;
+      }
+
+      for(const opt of options){
+        if(opt.partner!==null && beam.usedResources.has(opt.partner)) continue;
+        if(opt.partner!==null && opt.partner<29 && beam.coCleared.has(opt.partner)) continue;
+
+        const used=new Set(beam.usedResources);
+        const co=new Set(beam.coCleared);
+        if(opt.partner!==null) used.add(opt.partner);
+        co.add(target);
+        if(opt.partner!==null && opt.partner<29) co.add(opt.partner);
+
+        next.push({
+          score:beam.score+opt.score,
+          jobs:[...beam.jobs,opt],
+          usedResources:used,
+          coCleared:co
+        });
+      }
+    }
+    next.sort((a,b)=>b.score-a.score);
+    beams=next.slice(0,ENDGAME_BEAM_WIDTH);
+  }
+
+  const candidates=beams.slice(0,ENDGAME_KEEP_CANDIDATES).map((p,index)=>{
+    const inventoryTarget=buildInventoryTargetFromEndgame(p,s);
+    const tile1Job=p.jobs.find(j=>j.target===1)||null;
+    return {
+      id:`EG-${index+1}`,
+      rank:index+1,
+      structuralScore:p.score,
+      tile1:{
+        emoji:s.tileData[1],
+        method:tile1Job?.kind||'UNRESOLVED',
+        partner:tile1Job?.partner??null,
+        partnerEmoji:tile1Job?.partner?s.tileData[tile1Job.partner]:null
+      },
+      jobs:p.jobs.map(j=>({
+        target:j.target,targetEmoji:s.tileData[j.target],
+        kind:j.kind,partner:j.partner,
+        partnerEmoji:j.partner?s.tileData[j.partner]:null,
+        requiresHold:!!j.requiresHold,
+        reason:j.reason,
+        label:endgameJobLabel(j,s)
+      })),
+      inventoryTarget
+    };
+  });
+
+  const best=candidates[0]||null;
+  return {
+    mode:'DIAGNOSTIC_ONLY',
+    coreTargets:[...ENDGAME_CORE_TARGETS],
+    explanation:'Candidate endgames are generated backward from Tile 1. Multiple hypotheses are retained; the full-plan search is not yet forced to follow them.',
+    candidateCount:candidates.length,
+    selectedForDisplay:best?.id||null,
+    candidates
+  };
+}
+function renderEndgameAnalysis(a){
+  const summary=document.getElementById('endgameSummary');
+  const body=document.getElementById('endgameCandidates');
+  if(!summary||!body) return;
+  if(!a?.candidates?.length){
+    summary.textContent='No endgame hypothesis could be generated.';
+    body.textContent='';
+    return;
+  }
+  const best=a.candidates[0];
+  const t1=best.tile1.partner
+    ? `Tile 1 (${best.tile1.emoji}) ← ${best.tile1.partner} (${best.tile1.partnerEmoji})`
+    : `Tile 1 (${best.tile1.emoji})`;
+  summary.textContent=`Diagnostic only — keeping ${a.candidateCount} endgame hypotheses alive. Top hypothesis: ${t1}.`;
+
+  const lines=best.inventoryTarget.structuralExecution.map((j,i)=>`${i+1}. ${j.label}`);
+  const protect=best.inventoryTarget.protectedInventoryIds.length
+    ? `Protect inventory: ${best.inventoryTarget.protectedInventoryIds.join(', ')}`
+    : 'No inventory reservations in the core hypothesis.';
+  const holds=best.inventoryTarget.holdReservations.length
+    ? `Hold jobs: ${best.inventoryTarget.holdReservations.map(h=>`${h.tileId}→${h.futureTarget}`).join(', ')}`
+    : 'No Hold reservation in the core hypothesis.';
+  body.textContent=`Top structural corridor (earlier → later):\n${lines.join('\n')}\n${protect}\n${holds}`;
+}
+
 
 // --- v0.2 current-deployment inventory-wave strategy helpers ---------------------------------
 // These are deliberately cheap heuristics. They do not replace the search;
@@ -1118,6 +1353,7 @@ function buildPlanMeta(action,index){
     inventoryUsed:solverPlanResult?.selectedInventoryUsed,
     perfectCandidates:solverPlanResult?.perfectCandidates||0,
     perfectProbe:solverPlanResult?.perfectProbe||null,
+    endgameHypothesis:solverEndgameAnalysis?.candidates?.[0]||null,
     planMove:index+1,
     plannedMoves:solverPlan.length,
     chosen:actionLabel(state,action)
@@ -1194,8 +1430,10 @@ async function prepareSolverPlan(){
   calc.textContent='Calculating…';
   solverSessionStats={decisions:0,totalNodes:0,duplicates:0,deadBranches:0,limitHits:0};
   solverActualSeen=new Map(); solverPlan=[]; solverPlanIndex=0; solverPlanResult=null;
-  setStatus('Checking the known 8260 setup combinations first…');
-  document.getElementById('planProgress').textContent='8260 Perfect Score Probe starting…';
+  solverEndgameAnalysis=analyzeEndgamePlans(simClone(state));
+  renderEndgameAnalysis(solverEndgameAnalysis);
+  setStatus('Endgame-first diagnostic complete. Checking the known 8260 setup combinations next…');
+  document.getElementById('planProgress').textContent='Endgame hypotheses preserved; 8260 Perfect Score Probe starting…';
   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
   const perfect=await searchPerfectScore(simClone(state));
   if(perfect.path){
