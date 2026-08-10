@@ -73,7 +73,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.8.4</div>
+<div class="version">Puzzle Pyramid AI JS v0.9 — Standard + Deep</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -97,7 +97,7 @@ h1 { text-align:center; margin:0 0 4px; }
   <button id="pause-solver-button">Pause Solver</button>
   <button id="forward-step-button">Forward Step</button>
 </div>
-<div class="solver-note">v0.8.4 validates backward endgame hypotheses, then runs a shared-budget reachability phase from the real starting puzzle. Reachability can be REACHABLE, UNREACHABLE, or UNKNOWN when the budget expires. The page yields during this phase so iPhone Safari stays responsive. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. Independent solving now uses hard wall-clock budgets for ENDGAME, REACHABILITY, 8260 PROBE, and FULL SEARCH. REACHABILITY is a bounded proof attempt: when its budget expires it returns UNKNOWN and the solver continues instead of blocking. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
+<div class="solver-note">v0.9 validates backward endgame hypotheses, then runs a shared-budget reachability phase from the real starting puzzle. Reachability can be REACHABLE, UNREACHABLE, or UNKNOWN when the budget expires. The page yields during this phase so iPhone Safari stays responsive. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. Independent solving uses hard wall-clock budgets for ENDGAME, REACHABILITY, 8260 PROBE, and search. STANDARD preserves the v0.8.4 phone-safe baseline. DEEP first runs that baseline, then progressively widens the beam/state budget and adds endgame-resource, long-streak, inventory-molding, and reset-avoidance guidance while always retaining the best completed score found. REACHABILITY is a bounded proof attempt: when its budget expires it returns UNKNOWN and the solver continues instead of blocking. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -145,7 +145,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.8.4-probe-timing-fix';
+const VERSION='Puzzle Pyramid AI JS v0.9-standard-deep';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -356,13 +356,17 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'teacher-memory-probe-timing-fix-v0.8.4',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'standard-deep-progressive-v0.9',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
 demoMovesUsed:(solverPlanResult?.memoryReplay?solverPlan.length:0),
+solverDepthMode:SOLVER_DEPTH_MODE,
+deepSearch:solverDeepStats,
 phaseStats:solverPhaseStats,
 memory:{useMode:memoryUseMode,info:solverMemoryInfo},endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 
+const SOLVER_DEPTH_MODE=(localStorage.getItem('ppaiSolverDepthMode')==='DEEP')?'DEEP':'STANDARD';
+let activeSearchFlavor='STANDARD';
 const SEARCH_DEPTH=24;
 const SEARCH_NODE_LIMIT=100000;
 const SEARCH_BEAM_WIDTH=18;
@@ -381,12 +385,12 @@ let solverPlan=[];
 let solverPlanIndex=0;
 let solverPlanResult=null;
 let solverEndgameAnalysis=null;
-const SOLVER_TOTAL_TIME_BUDGET_MS=22000;
+const SOLVER_TOTAL_TIME_BUDGET_MS=SOLVER_DEPTH_MODE==='DEEP'?95000:22000;
 const ENDGAME_GENERATION_BUDGET_MS=3500;
 const REACHABILITY_WALL_BUDGET_MS=3500;
 const REACHABILITY_INNER_YIELD_EVERY=40;
-const PERFECT_PROBE_WALL_BUDGET_MS=4000;
-const FULL_SEARCH_WALL_BUDGET_MS=7000;
+const PERFECT_PROBE_WALL_BUDGET_MS=SOLVER_DEPTH_MODE==='DEEP'?9000:4000;
+const FULL_SEARCH_WALL_BUDGET_MS=SOLVER_DEPTH_MODE==='DEEP'?70000:7000;
 let solverDeadline=0;
 let solverPhaseDeadline=0;
 let solverTimedOut=false;
@@ -395,6 +399,13 @@ let solverPhaseStats={
   reachability:{elapsedMs:0,truncated:false,states:0},
   perfectProbe:{elapsedMs:0,truncated:false,states:0},
   fullSearch:{elapsedMs:0,truncated:false,states:0}
+};
+let solverDeepStats={
+  enabled:SOLVER_DEPTH_MODE==='DEEP',
+  standardBaselineScore:null,
+  selectedScore:null,
+  improvement:0,
+  passes:[]
 };
 const solverMode=localStorage.getItem('ppaiSolverMode')||'AUTO';
 const solverHintsRaw=JSON.parse(localStorage.getItem('solverHints')||'{}');
@@ -422,7 +433,7 @@ function normalizeDemoAction(d){if(!d||!d.type)return null;const ref=(id,zone)=>
 function demoPathFor(record){return (record?.moves||[]).map(normalizeDemoAction).filter(Boolean)}
 function compareHints(candidate){const r={supplied:0,matches:0,misses:[]};if(!candidate)return r;for(const t of [1,2,3,4,5,6]){const k=`t${t}`,wanted=Number(solverHints[k]);if(!wanted)continue;r.supplied++;const job=candidate.jobs?.find(j=>j.target===t);const got=Number(job?.partner);if(got===wanted)r.matches++;else r.misses.push(`${k.toUpperCase()}: human ${wanted}, PPAI ${got||'none'}`)}const litp=Number(solverHints.litp);if(litp){r.supplied++;const got=Number(candidate.inventoryTarget?.litp?.tileId);if(got===litp)r.matches++;else r.misses.push(`LITP: human ${litp}, PPAI ${got||'none'}`)}return r}
 function guidedCandidateAccept(candidate){if(solverMode!=='GUIDED')return true;const c=compareHints(candidate);return c.supplied===0||c.matches===c.supplied}
-function renderMemoryInfo(){const sum=document.getElementById('memorySummary'),det=document.getElementById('memoryDetails');if(!sum||!det)return;const known=solverMemoryInfo?.knownDemos||[];sum.textContent=`Mode ${solverMode}; demo use ${memoryUseMode}; exact known demos ${known.length}.`;let lines=[];if(known.length)lines.push(`Best known human score: ${known[0].finalScore??'?'}.`);if(solverEndgameAnalysis?.candidates?.[0]&&(solverMode==='COMPARE'||solverMode==='GUIDED')){const c=compareHints(solverEndgameAnalysis.candidates[0]);lines.push(`Teacher agreement: ${c.matches}/${c.supplied||0}.`);if(c.misses.length)lines.push(...c.misses)}if(memoryUseMode==='REPLAY'&&known.length)lines.push('Exact replay is enabled for this known puzzle.');else if(memoryUseMode==='INFORMED'&&known.length)lines.push('Known demos may influence diagnostics, but exact replay is not forced.');else lines.push('Solver is not using exact demo replay.');det.textContent=lines.join('\n')}
+function renderMemoryInfo(){const sum=document.getElementById('memorySummary'),det=document.getElementById('memoryDetails');if(!sum||!det)return;const known=solverMemoryInfo?.knownDemos||[];sum.textContent=`Teacher ${solverMode}; search ${SOLVER_DEPTH_MODE}; demo use ${memoryUseMode}; exact known demos ${known.length}.`;let lines=[];if(known.length)lines.push(`Best known human score: ${known[0].finalScore??'?'}.`);if(solverEndgameAnalysis?.candidates?.[0]&&(solverMode==='COMPARE'||solverMode==='GUIDED')){const c=compareHints(solverEndgameAnalysis.candidates[0]);lines.push(`Teacher agreement: ${c.matches}/${c.supplied||0}.`);if(c.misses.length)lines.push(...c.misses)}if(memoryUseMode==='REPLAY'&&known.length)lines.push('Exact replay is enabled for this known puzzle.');else if(memoryUseMode==='INFORMED'&&known.length)lines.push('Known demos may influence diagnostics, but exact replay is not forced.');else lines.push('Solver is not using exact demo replay.');det.textContent=lines.join('\n')}
 let executingPlannedAction=false;
 
 function simClone(s){ return JSON.parse(JSON.stringify(s)); }
@@ -1681,6 +1692,13 @@ function quickActionBias(s,action,next){
   }
 
   b+=(inventoryWavePotential(next)-inventoryWavePotential(s))*0.8;
+  if(activeSearchFlavor==='DEEP'){
+    const guidanceDelta=endgameGuidanceScore(next)-endgameGuidanceScore(s);
+    b+=guidanceDelta*2.2;
+    const streakDelta=Math.max(0,next.streak-3)-Math.max(0,s.streak-3);
+    b+=streakDelta*220;
+    if(action.type==='RESET') b-=420;
+  }
   if(next.gameOver)b+=1000000;
   return b;
 }
@@ -1893,13 +1911,45 @@ function betterCompleted(a,b){
   if((a.state.resetsUsed||0)!==(b.state.resetsUsed||0)) return (a.state.resetsUsed||0)<(b.state.resetsUsed||0);
   return a.path.length<b.path.length;
 }
+
+function endgameGuidanceScore(s){
+  if(activeSearchFlavor!=='DEEP') return 0;
+  const best=solverEndgameAnalysis?.candidates?.[0];
+  if(!best) return 0;
+  let value=0;
+  for(const job of (best.jobs||[])){
+    const target=Number(job.target), partner=Number(job.partner);
+    if(!target || s.tileData[target]===null) continue;
+    if(job.kind==='CLEAR_SELF') continue;
+    if(!partner) continue;
+    const partnerAlive=partner>=29
+      ? s.tileData[partner]!==null
+      : (s.tileData[partner]!==null || (s.hold && Number(s.hold.sourceId)===partner));
+    value += partnerAlive ? 140 : -850;
+  }
+  const litp=Number(best.inventoryTarget?.litp?.tileId);
+  if(litp && s.tileData[1]!==null){
+    value += s.tileData[litp]!==null ? 420 : -1200;
+  }
+  return value;
+}
+function deepStrategicBonus(s){
+  if(activeSearchFlavor!=='DEEP') return 0;
+  const longStreak=Math.max(0,s.streak-3);
+  return longStreak*longStreak*1500
+    + endgameGuidanceScore(s)*95
+    + nextDeploymentPotential(s)*22
+    + postResetLaunchBonus(s)*16
+    - (s.resetsUsed||0)*26000;
+}
 function planRank(node){
   const s=node.state, cleared=clearedPyramidCount(s), inv=inventoryUsedCount(s);
   if(s.gameOver)return evaluateState(s);
   const wave=inventoryWavePotential(s), alignment=holdInventoryAlignment(s), nextDeployment=nextDeploymentPotential(s);
   return cleared*42000 + inv*12000 + s.score*30 + s.streak*160 + exposedPyramidCount(s)*500 + immediateScoringCount(s)*450
     + wave*65 + alignment*95 + nextDeployment*42 + postResetLaunchBonus(s)*28
-    - (s.resetsUsed||0)*1000 - node.path.length*3;
+    - (s.resetsUsed||0)*1000 - node.path.length*3
+    + deepStrategicBonus(s);
 }
 function updatePlanPanel(result,progressText=''){
   document.getElementById('planStates').textContent=(result?.statesExamined||0).toLocaleString();
@@ -2022,14 +2072,25 @@ async function searchPerfectScore(initial){
     : 'Known 8260 setup family checked; no perfect route found. Roadblock data preserved for repair search.';
   return {probe,path:null,state:null};
 }
-async function searchBestPlan(perfectProbe=null){
+async function searchBestPlan(perfectProbe=null,config={}){
   const initial=simClone(state);
-  const result={statesExamined:0,duplicatesSkipped:0,deadBranches:0,solutionsFound:0,perfectCandidates:0,bestCompletedScore:null,bestMoveCount:null,bestResets:null,bestScoreImprovements:0,bestPartialScore:initial.score,limitReached:false,optimalityProven:false,stopReason:'',searchedDepth:0,perfectSetupSeeds:0};
+  const stateLimit=config.stateLimit??SEARCH_NODE_LIMIT;
+  const beamWidth=config.beamWidth??PLAN_BEAM_WIDTH;
+  const maxDepth=config.maxDepth??PLAN_MAX_DEPTH;
+  const phaseName=config.phaseName||'STANDARD';
+  const yieldEvery=config.yieldEvery??1;
+  activeSearchFlavor=config.flavor||'STANDARD';
+
+  const result={
+    statesExamined:0,duplicatesSkipped:0,deadBranches:0,solutionsFound:0,perfectCandidates:0,
+    bestCompletedScore:null,bestMoveCount:null,bestResets:null,bestScoreImprovements:0,
+    bestPartialScore:initial.score,limitReached:false,optimalityProven:false,stopReason:'',
+    searchedDepth:0,perfectSetupSeeds:0,
+    searchFlavor:activeSearchFlavor,phaseName,stateLimit,beamWidth,maxDepth
+  };
+
   const perfectSeeds=buildPerfectSetupSeeds(initial); result.perfectSetupSeeds=perfectSeeds.length;
   const repairSeeds=(perfectProbe?.repairSeeds||[]).map(x=>({state:simClone(x.state),path:x.path,rank:x.rank,seedLabel:x.seedLabel}));
-  // v0.3: do not make draw-heavy setup states compete with scored states before
-  // they have a chance to mature. Seed the normal beam with all known 8260
-  // setup families plus the best roadblock states from the failed perfect probe.
   let frontier=[
     {state:initial,path:[],rank:planRank({state:initial,path:[]}),seedLabel:'general'},
     ...perfectSeeds,
@@ -2039,27 +2100,35 @@ async function searchBestPlan(perfectProbe=null){
   result.roadblock=perfectProbe?.roadblock||null;
   let bestComplete=null;
   let bestPartial={state:initial,path:[],rank:planRank({state:initial,path:[]})};
-  const seen=new Map(); frontier.forEach(n=>{const k=planStateKey(n.state),p=seen.get(k); if(p===undefined||n.state.score>p)seen.set(k,n.state.score);});
-  updatePlanPanel(result,'Starting full-plan search…');
-  for(let depth=0; depth<PLAN_MAX_DEPTH && frontier.length && result.statesExamined<SEARCH_NODE_LIMIT && !solverTimeExpired(); depth++){
+  const seen=new Map();
+  frontier.forEach(n=>{const k=planStateKey(n.state),p=seen.get(k);if(p===undefined||n.state.score>p)seen.set(k,n.state.score);});
+
+  updatePlanPanel(result,`${phaseName}: starting search — beam ${beamWidth.toLocaleString()}, limit ${stateLimit.toLocaleString()} states…`);
+
+  for(let depth=0;depth<maxDepth && frontier.length && result.statesExamined<stateLimit && !solverTimeExpired();depth++){
     result.searchedDepth=depth+1;
     const nextNodes=[];
+
     for(const node of frontier){
-      if(solverTimeExpired()){result.limitReached=true;break;}
+      if(solverTimeExpired()){break;}
       const actions=generateLegalActions(node.state);
-      if(!actions.length){ result.deadBranches++; continue; }
+      if(!actions.length){result.deadBranches++;continue;}
+
       const ordered=actions.map(action=>{
         const next=simApplyAction(node.state,action);
         return {action,next,q:evaluateState(next)+quickActionBias(node.state,action,next)};
       }).sort((a,b)=>b.q-a.q);
+
       for(const item of ordered){
-        if(result.statesExamined>=SEARCH_NODE_LIMIT){ result.limitReached=true; break; }
+        if(solverTimeExpired()) break;
+        if(result.statesExamined>=stateLimit){result.limitReached=true;break;}
         result.statesExamined++;
+
         const path=node.path.concat([item.action]);
         const next=item.next;
         if(next.gameOver){
           result.solutionsFound++;
-          if(next.score===PERFECT_SCORE && inventoryUsedCount(next)===24) result.perfectCandidates++;
+          if(next.score===PERFECT_SCORE && inventoryUsedCount(next)===24)result.perfectCandidates++;
           const candidate={state:next,path};
           if(betterCompleted(candidate,bestComplete)){
             bestComplete=candidate;
@@ -2070,25 +2139,35 @@ async function searchBestPlan(perfectProbe=null){
           }
           continue;
         }
-        const key=planStateKey(next), prev=seen.get(key);
-        if(prev!==undefined && prev>=next.score){ result.duplicatesSkipped++; continue; }
+
+        const key=planStateKey(next),prev=seen.get(key);
+        if(prev!==undefined && prev>=next.score){result.duplicatesSkipped++;continue;}
         seen.set(key,next.score);
+
         const rank=planRank({state:next,path});
         if(next.score>result.bestPartialScore)result.bestPartialScore=next.score;
-        if(rank>bestPartial.rank) bestPartial={state:next,path,rank};
+        if(rank>bestPartial.rank)bestPartial={state:next,path,rank};
         nextNodes.push({state:next,path,rank});
       }
-      if(result.limitReached) break;
+      if(result.limitReached||solverTimeExpired())break;
     }
+
     nextNodes.sort((a,b)=>b.rank-a.rank);
-    frontier=nextNodes.slice(0,PLAN_BEAM_WIDTH);
-    updatePlanPanel(result,`Searching… depth ${depth+1}; frontier ${frontier.length.toLocaleString()}; ${(result.statesExamined).toLocaleString()} scenarios examined.`);
-    await new Promise(r=>setTimeout(r,0));
+    frontier=nextNodes.slice(0,beamWidth);
+
+    if(depth%yieldEvery===0){
+      updatePlanPanel(result,`${phaseName}: depth ${depth+1}; frontier ${frontier.length.toLocaleString()}; ${result.statesExamined.toLocaleString()} states; best ${result.bestCompletedScore?.toLocaleString()||'—'}.`);
+      await solverYield(phaseName);
+    }
+    if(result.bestCompletedScore===PERFECT_SCORE) break;
   }
-  if(solverTimedOut) result.stopReason=`Stopped at the ${Math.round(SOLVER_TOTAL_TIME_BUDGET_MS/1000)}-second phone-safe time budget. Best result found so far.`;
-  else if(result.limitReached) result.stopReason=`Stopped at the ${SEARCH_NODE_LIMIT.toLocaleString()}-scenario limit. Best result found, not proof of optimality.`;
-  else if(!frontier.length) result.stopReason='Search frontier exhausted within the beam search. Because beam pruning was used, optimality is not proven.';
-  else result.stopReason=`Stopped at plan depth ${PLAN_MAX_DEPTH}. Best result found, not proof of optimality.`;
+
+  if(solverTimeExpired()) result.stopReason=`${phaseName} stopped at its time budget; best result retained.`;
+  else if(result.limitReached) result.stopReason=`${phaseName} stopped at ${stateLimit.toLocaleString()} states; best result retained.`;
+  else if(!frontier.length) result.stopReason=`${phaseName} frontier exhausted within beam ${beamWidth.toLocaleString()}; optimality not proven.`;
+  else if(result.bestCompletedScore===PERFECT_SCORE) result.stopReason=`${phaseName} found PERFECT 8260.`;
+  else result.stopReason=`${phaseName} stopped at depth ${maxDepth}; best result retained.`;
+
   const chosen=bestComplete||bestPartial;
   result.usedCompleteSolution=!!bestComplete;
   result.selectedPathLength=chosen.path.length;
@@ -2096,14 +2175,97 @@ async function searchBestPlan(perfectProbe=null){
   result.selectedInventoryUsed=inventoryUsedCount(chosen.state);
   result.selectedPerfectPossible=perfectRoutePossible(chosen.state);
   result.bestPartialScore=Math.max(result.bestPartialScore,bestPartial.state.score);
-  result.duplicatesSkipped=result.duplicatesSkipped;
-  result.deadBranches=result.deadBranches;
   updatePlanPanel(result,result.stopReason);
-  return {result,path:chosen.path};
+  return {result,path:chosen.path,state:chosen.state};
+}
+
+function betterPlanRun(a,b){
+  if(!a) return b;
+  if(!b) return a;
+  const as=a.result?.bestCompletedScore, bs=b.result?.bestCompletedScore;
+  if(as!=null || bs!=null){
+    if(as==null) return b;
+    if(bs==null) return a;
+    if(bs!==as) return bs>as?b:a;
+    const ar=a.result?.bestResets??999, br=b.result?.bestResets??999;
+    if(br!==ar) return br<ar?b:a;
+    return (b.path?.length||999)<(a.path?.length||999)?b:a;
+  }
+  return (b.result?.bestPartialScore||0)>(a.result?.bestPartialScore||0)?b:a;
+}
+
+async function runProgressiveDeepSearch(perfectProbe){
+  const passes=[
+    {name:'STANDARD BASELINE',flavor:'STANDARD',stateLimit:100000,beamWidth:640,maxDepth:100,timeMs:9000},
+    {name:'DEEP PASS 1',flavor:'DEEP',stateLimit:250000,beamWidth:1200,maxDepth:120,timeMs:22000},
+    {name:'DEEP PASS 2',flavor:'DEEP',stateLimit:600000,beamWidth:2200,maxDepth:140,timeMs:38000}
+  ];
+
+  let best=null;
+  solverDeepStats.passes=[];
+
+  for(let i=0;i<passes.length;i++){
+    if(solverDeadline && performance.now()>=solverDeadline) break;
+    const p=passes[i];
+    const passStart=performance.now();
+    setSolverPhaseBudget(p.timeMs);
+    document.getElementById('calculated-score-value').textContent=p.name;
+
+    const run=await searchBestPlan(perfectProbe,{
+      stateLimit:p.stateLimit,beamWidth:p.beamWidth,maxDepth:p.maxDepth,
+      phaseName:p.name,flavor:p.flavor,yieldEvery:1
+    });
+    clearSolverPhaseBudget();
+
+    const score=run.result?.bestCompletedScore??null;
+    solverDeepStats.passes.push({
+      pass:i+1,name:p.name,flavor:p.flavor,
+      elapsedMs:Math.round(performance.now()-passStart),
+      statesExamined:run.result?.statesExamined||0,
+      solutionsFound:run.result?.solutionsFound||0,
+      bestCompletedScore:score,
+      bestResets:run.result?.bestResets??null,
+      stopReason:run.result?.stopReason||''
+    });
+
+    if(i===0) solverDeepStats.standardBaselineScore=score;
+    best=betterPlanRun(best,run);
+
+    const incumbent=best?.result?.bestCompletedScore;
+    document.getElementById('planProgress').textContent=
+      `${p.name} complete. Incumbent ${incumbent!=null?incumbent.toLocaleString():'partial only'}. `+
+      `${i+1<passes.length?'Continuing deeper…':'Deep search complete.'}`;
+    await solverYield(i+1<passes.length?'DEEPER':'DEEP DONE');
+
+    if(incumbent===PERFECT_SCORE) break;
+  }
+
+  activeSearchFlavor='STANDARD';
+  solverDeepStats.selectedScore=best?.result?.bestCompletedScore??null;
+  solverDeepStats.improvement=
+    solverDeepStats.selectedScore!=null && solverDeepStats.standardBaselineScore!=null
+      ? solverDeepStats.selectedScore-solverDeepStats.standardBaselineScore
+      : 0;
+
+  if(best){
+    best.result.deepMode=true;
+    best.result.deepPasses=JSON.parse(JSON.stringify(solverDeepStats.passes));
+    best.result.standardBaselineScore=solverDeepStats.standardBaselineScore;
+    best.result.deepImprovement=solverDeepStats.improvement;
+    best.result.stopReason=
+      `Deep selected ${best.result.bestCompletedScore?.toLocaleString()||'best partial'}; `+
+      `baseline ${solverDeepStats.standardBaselineScore?.toLocaleString()||'none'}; `+
+      `improvement ${solverDeepStats.improvement>=0?'+':''}${solverDeepStats.improvement}.`;
+    updatePlanPanel(best.result,best.result.stopReason);
+  }
+  return best;
 }
 function buildPlanMeta(action,index){
   return {
     mode:'FULL_PLAN',
+    solverDepthMode:SOLVER_DEPTH_MODE,
+    searchFlavor:solverPlanResult?.searchFlavor||null,
+    deepImprovement:solverPlanResult?.deepImprovement??0,
     resultLabel:solverPlanResult?.usedCompleteSolution?'BEST COMPLETE FOUND':'BEST PARTIAL FOUND',
     optimalityProven:false,
     planStatesExamined:solverPlanResult?.statesExamined||0,
@@ -2194,6 +2356,7 @@ async function prepareSolverPlan(){
     perfectProbe:{elapsedMs:0,truncated:false,states:0},
     fullSearch:{elapsedMs:0,truncated:false,states:0}
   };
+  solverDeepStats={enabled:SOLVER_DEPTH_MODE==='DEEP',standardBaselineScore:null,selectedScore:null,improvement:0,passes:[]};
   calc.textContent='ENDGAME';
   solverSessionStats={decisions:0,totalNodes:0,duplicates:0,deadBranches:0,limitHits:0};
   solverActualSeen=new Map(); solverPlan=[]; solverPlanIndex=0; solverPlanResult=null;
@@ -2234,17 +2397,34 @@ async function prepareSolverPlan(){
     solverPlanResult={statesExamined:perfect.probe.statesExamined,duplicatesSkipped:perfect.probe.duplicatesSkipped,deadBranches:0,solutionsFound:1,perfectCandidates:1,bestCompletedScore:PERFECT_SCORE,bestMoveCount:perfect.path.length,bestResets:0,bestScoreImprovements:1,bestPartialScore:0,limitReached:false,optimalityProven:false,stopReason:perfect.probe.stopReason,searchedDepth:perfect.path.length,perfectSetupSeeds:perfect.probe.setupCount,usedCompleteSolution:true,selectedPathLength:perfect.path.length,selectedFinalScore:PERFECT_SCORE,selectedInventoryUsed:24,selectedPerfectPossible:true,perfectProbe:perfect.probe};
     solverPlan=perfect.path; updatePlanPanel(solverPlanResult,perfect.probe.stopReason);
   }else{
-    setStatus(`${perfect.probe.stopReason} Searching up to ${SEARCH_NODE_LIMIT.toLocaleString()} normal full-game scenarios…`);
-    calc.textContent='FULL SEARCH';
     const fullSearchStarted=performance.now();
-    setSolverPhaseBudget(FULL_SEARCH_WALL_BUDGET_MS);
-    await solverYield('FULL SEARCH');
-    const found=await searchBestPlan(perfect.probe);
+    let found;
+    if(SOLVER_DEPTH_MODE==='DEEP'){
+      setStatus(`${perfect.probe.stopReason} Starting Standard baseline, then progressive Deep search…`);
+      calc.textContent='STANDARD BASELINE';
+      await solverYield('STANDARD BASELINE');
+      found=await runProgressiveDeepSearch(perfect.probe);
+    }else{
+      setStatus(`${perfect.probe.stopReason} Searching up to ${SEARCH_NODE_LIMIT.toLocaleString()} normal full-game scenarios…`);
+      calc.textContent='FULL SEARCH';
+      setSolverPhaseBudget(FULL_SEARCH_WALL_BUDGET_MS);
+      await solverYield('FULL SEARCH');
+      found=await searchBestPlan(perfect.probe,{
+        stateLimit:SEARCH_NODE_LIMIT,beamWidth:PLAN_BEAM_WIDTH,maxDepth:PLAN_MAX_DEPTH,
+        phaseName:'FULL SEARCH',flavor:'STANDARD'
+      });
+      clearSolverPhaseBudget();
+    }
     solverPhaseStats.fullSearch.elapsedMs=Math.round(performance.now()-fullSearchStarted);
-    solverPhaseStats.fullSearch.states=found?.result?.statesExamined||0;
-    solverPhaseStats.fullSearch.truncated=solverTimeExpired();
-    clearSolverPhaseBudget();
-    found.result.perfectProbe=perfect.probe; solverPlanResult=found.result; solverPlan=found.path;
+    solverPhaseStats.fullSearch.states=SOLVER_DEPTH_MODE==='DEEP'
+      ? solverDeepStats.passes.reduce((n,p)=>n+(p.statesExamined||0),0)
+      : (found?.result?.statesExamined||0);
+    solverPhaseStats.fullSearch.truncated=solverTimedOut;
+    if(found){
+      found.result.perfectProbe=perfect.probe;
+      solverPlanResult=found.result;
+      solverPlan=found.path;
+    }
   }
   solverPlanIndex=0;
   solverSessionStats.decisions=solverPlan.length;
@@ -2267,9 +2447,20 @@ async function prepareSolverPlan(){
   calc.textContent=score!=null?`FOUND ${score.toLocaleString()}`:(solverPlan.length?'BEST PARTIAL':'NO SOLUTION');
   startButton.disabled=!solverPlan.length; forwardButton.disabled=!solverPlan.length;
   if(!solverPlan.length){ setStatus('No playable plan found.'); return; }
-  if(complete) setStatus(`Solution ready: calculated final score ${score.toLocaleString()}. Press Start Solver to play it.`);
-  else setStatus(`No complete solution found. Best partial plan scores ${solverPlanResult.bestPartialScore.toLocaleString()}.`);
-  document.getElementById('planProgress').textContent=`Solution ready — ${solverPlan.length} planned moves. Press Start Solver or use Forward Step.`;
+  if(complete){
+    if(SOLVER_DEPTH_MODE==='DEEP' && solverPlanResult?.deepMode){
+      const base=solverPlanResult.standardBaselineScore;
+      const gain=solverPlanResult.deepImprovement||0;
+      setStatus(`Deep solution ready: ${score.toLocaleString()} points. Standard baseline ${base?.toLocaleString()||'—'}; ${gain>=0?'+':''}${gain} improvement. Press Start Solver.`);
+      document.getElementById('planProgress').textContent=`DEEP selected ${score.toLocaleString()} — baseline ${base?.toLocaleString()||'—'}, improvement ${gain>=0?'+':''}${gain}. ${solverPlan.length} planned moves.`;
+    }else{
+      setStatus(`Solution ready: calculated final score ${score.toLocaleString()}. Press Start Solver to play it.`);
+      document.getElementById('planProgress').textContent=`Solution ready — ${solverPlan.length} planned moves. Press Start Solver or use Forward Step.`;
+    }
+  }else{
+    setStatus(`No complete solution found. Best partial plan scores ${solverPlanResult.bestPartialScore.toLocaleString()}.`);
+    document.getElementById('planProgress').textContent=`Best partial plan — ${solverPlan.length} planned moves.`;
+  }
 }
 async function startSolver(){
   if(solverRunning||state.gameOver||!solverPlan.length) return;
