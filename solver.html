@@ -73,7 +73,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.9 — Standard + Deep</div>
+<div class="version">Puzzle Pyramid AI JS v0.9.1 — Smarter Deep</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -97,7 +97,7 @@ h1 { text-align:center; margin:0 0 4px; }
   <button id="pause-solver-button">Pause Solver</button>
   <button id="forward-step-button">Forward Step</button>
 </div>
-<div class="solver-note">v0.9 validates backward endgame hypotheses, then runs a shared-budget reachability phase from the real starting puzzle. Reachability can be REACHABLE, UNREACHABLE, or UNKNOWN when the budget expires. The page yields during this phase so iPhone Safari stays responsive. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. Independent solving uses hard wall-clock budgets for ENDGAME, REACHABILITY, 8260 PROBE, and search. STANDARD preserves the v0.8.4 phone-safe baseline. DEEP first runs that baseline, then progressively widens the beam/state budget and adds endgame-resource, long-streak, inventory-molding, and reset-avoidance guidance while always retaining the best completed score found. REACHABILITY is a bounded proof attempt: when its budget expires it returns UNKNOWN and the solver continues instead of blocking. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
+<div class="solver-note">v0.9.1 validates backward endgame hypotheses, then runs a shared-budget reachability phase from the real starting puzzle. Reachability can be REACHABLE, UNREACHABLE, or UNKNOWN when the budget expires. The page yields during this phase so iPhone Safari stays responsive. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. Independent solving uses hard wall-clock budgets for ENDGAME, REACHABILITY, 8260 PROBE, and search. STANDARD preserves the phone-safe baseline. DEEP now uses phase-aware strategy: short micro-streaks are acceptable during setup, long streaks are prioritized after inventory exposure, reset cost is phase-sensitive, and a diversity-preserving beam keeps alternative strategy families alive. In Demo-Informed mode, Deep may also use aggregate human strategy traits such as longest streak, reset count, and setup timing — never recorded move IDs or move order. REACHABILITY is a bounded proof attempt: when its budget expires it returns UNKNOWN and the solver continues instead of blocking. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -145,7 +145,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.9-standard-deep';
+const VERSION='Puzzle Pyramid AI JS v0.9.1-smarter-deep';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -356,9 +356,15 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'standard-deep-progressive-v0.9',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'smarter-deep-phase-aware-v0.9.1',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
 demoMovesUsed:(solverPlanResult?.memoryReplay?solverPlan.length:0),
 solverDepthMode:SOLVER_DEPTH_MODE,
+learnedStrategyUse:{
+  enabled:!!deepTeacherProfile,
+  source:deepTeacherProfile?.source||null,
+  exactDemoMovesUsed:false,
+  profile:deepTeacherProfile
+},
 deepSearch:solverDeepStats,
 phaseStats:solverPhaseStats,
 memory:{useMode:memoryUseMode,info:solverMemoryInfo},endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
@@ -405,9 +411,13 @@ let solverDeepStats={
   standardBaselineScore:null,
   selectedScore:null,
   improvement:0,
+  teacherProfileUsed:false,
+  teacherProfile:null,
   passes:[]
 };
-const solverMode=localStorage.getItem('ppaiSolverMode')||'AUTO';
+let deepTeacherProfile=null;
+const rawSolverMode=localStorage.getItem('ppaiSolverMode');
+const solverMode=['AUTO','GUIDED','COMPARE'].includes(rawSolverMode)?rawSolverMode:'AUTO';
 const solverHintsRaw=JSON.parse(localStorage.getItem('solverHints')||'{}');
 const solverHints={...solverHintsRaw,litp:solverHintsRaw.litp??solverHintsRaw.lit??null};
 const memoryUseMode=localStorage.getItem('ppaiMemoryUseMode')||'INDEPENDENT';
@@ -431,9 +441,61 @@ function loadDemoLibrary(){try{return JSON.parse(localStorage.getItem(DEMO_LIBRA
 function findKnownDemos(s){const sig=currentPuzzleSignature(s);return loadDemoLibrary().filter(d=>d.signature===sig).sort((a,b)=>(b.finalScore||0)-(a.finalScore||0))}
 function normalizeDemoAction(d){if(!d||!d.type)return null;const ref=(id,zone)=>({zone:zone||((Number(id)>=29)?'inventory':'pyramid'),tileId:Number(id)});if(d.type==='DRAW'||d.type==='RESET')return {type:d.type};if(d.type==='CLEAR')return {type:'CLEAR',a:ref(d.tileId??d.id,d.zone)};if(d.type==='HOLD')return {type:'HOLD',a:ref(d.tileId??d.id,d.fromZone)};if(d.type==='MATCH')return {type:'MATCH',a:ref(d.a,d.aZone),b:ref(d.b,d.bZone)};if(d.type==='MATCH_HOLD'){const other=d.otherTileId??d.o;return {type:'MATCH_HOLD',a:ref(other,d.otherZone),b:{zone:'hold',tileId:'h'}}}return null}
 function demoPathFor(record){return (record?.moves||[]).map(normalizeDemoAction).filter(Boolean)}
+function buildDemoStrategyProfile(record){
+  const rawMoves=record?.raw?.moves||record?.raw?.finalState?.logs||[];
+  if(!Array.isArray(rawMoves)||!rawMoves.length){
+    return {
+      source:'summary-only',
+      finalScore:record?.finalScore??null,
+      longestStreak:null,
+      resets:null,
+      holds:null,
+      firstLongStreakMove:null,
+      microStreakMax:null
+    };
+  }
+
+  let longestStreak=0, resets=0, holds=0, firstLongStreakMove=null, microStreakMax=0;
+  let longRunStarted=false;
+  for(const m of rawMoves){
+    if(m?.type==='RESET') resets++;
+    if(m?.type==='HOLD') holds++;
+    const streak=Number(m?.streak)||0;
+    longestStreak=Math.max(longestStreak,streak);
+    if(!longRunStarted){
+      microStreakMax=Math.max(microStreakMax,Math.min(streak,4));
+      if(streak>=5){
+        longRunStarted=true;
+        firstLongStreakMove=Number(m?.move)||null;
+      }
+    }
+  }
+
+  return {
+    source:'human-demo-features',
+    finalScore:record?.finalScore??null,
+    longestStreak,
+    resets,
+    holds,
+    firstLongStreakMove,
+    microStreakMax
+  };
+}
+function selectDeepTeacherProfile(){
+  if(SOLVER_DEPTH_MODE!=='DEEP' || memoryUseMode!=='INFORMED') return null;
+  const demos=solverMemoryInfo?.knownDemos||[];
+  if(!demos.length) return null;
+  return buildDemoStrategyProfile(demos[0]);
+}
+
 function compareHints(candidate){const r={supplied:0,matches:0,misses:[]};if(!candidate)return r;for(const t of [1,2,3,4,5,6]){const k=`t${t}`,wanted=Number(solverHints[k]);if(!wanted)continue;r.supplied++;const job=candidate.jobs?.find(j=>j.target===t);const got=Number(job?.partner);if(got===wanted)r.matches++;else r.misses.push(`${k.toUpperCase()}: human ${wanted}, PPAI ${got||'none'}`)}const litp=Number(solverHints.litp);if(litp){r.supplied++;const got=Number(candidate.inventoryTarget?.litp?.tileId);if(got===litp)r.matches++;else r.misses.push(`LITP: human ${litp}, PPAI ${got||'none'}`)}return r}
 function guidedCandidateAccept(candidate){if(solverMode!=='GUIDED')return true;const c=compareHints(candidate);return c.supplied===0||c.matches===c.supplied}
-function renderMemoryInfo(){const sum=document.getElementById('memorySummary'),det=document.getElementById('memoryDetails');if(!sum||!det)return;const known=solverMemoryInfo?.knownDemos||[];sum.textContent=`Teacher ${solverMode}; search ${SOLVER_DEPTH_MODE}; demo use ${memoryUseMode}; exact known demos ${known.length}.`;let lines=[];if(known.length)lines.push(`Best known human score: ${known[0].finalScore??'?'}.`);if(solverEndgameAnalysis?.candidates?.[0]&&(solverMode==='COMPARE'||solverMode==='GUIDED')){const c=compareHints(solverEndgameAnalysis.candidates[0]);lines.push(`Teacher agreement: ${c.matches}/${c.supplied||0}.`);if(c.misses.length)lines.push(...c.misses)}if(memoryUseMode==='REPLAY'&&known.length)lines.push('Exact replay is enabled for this known puzzle.');else if(memoryUseMode==='INFORMED'&&known.length)lines.push('Known demos may influence diagnostics, but exact replay is not forced.');else lines.push('Solver is not using exact demo replay.');det.textContent=lines.join('\n')}
+function renderMemoryInfo(){const sum=document.getElementById('memorySummary'),det=document.getElementById('memoryDetails');if(!sum||!det)return;const known=solverMemoryInfo?.knownDemos||[];sum.textContent=`Teacher ${solverMode}; search ${SOLVER_DEPTH_MODE}; demo use ${memoryUseMode}; exact known demos ${known.length}.`;let lines=[];if(known.length)lines.push(`Best known human score: ${known[0].finalScore??'?'}.`);if(solverEndgameAnalysis?.candidates?.[0]&&(solverMode==='COMPARE'||solverMode==='GUIDED')){const c=compareHints(solverEndgameAnalysis.candidates[0]);lines.push(`Teacher agreement: ${c.matches}/${c.supplied||0}.`);if(c.misses.length)lines.push(...c.misses)}if(memoryUseMode==='REPLAY'&&known.length)lines.push('Exact replay is enabled for this known puzzle.');
+else if(memoryUseMode==='INFORMED'&&known.length){
+  lines.push('Demo-Informed Strategy is enabled: Deep may use extracted strategy traits, but recorded moves are never replayed.');
+  if(deepTeacherProfile) lines.push(`Teacher traits: longest streak ${deepTeacherProfile.longestStreak??'?'}; resets ${deepTeacherProfile.resets??'?'}; first long streak move ${deepTeacherProfile.firstLongStreakMove??'?'}.`);
+}else lines.push('Solver is not using exact demo replay or demo-derived strategy traits.');
+det.textContent=lines.join('\n')}
 let executingPlannedAction=false;
 
 function simClone(s){ return JSON.parse(JSON.stringify(s)); }
@@ -1693,11 +1755,17 @@ function quickActionBias(s,action,next){
 
   b+=(inventoryWavePotential(next)-inventoryWavePotential(s))*0.8;
   if(activeSearchFlavor==='DEEP'){
-    const guidanceDelta=endgameGuidanceScore(next)-endgameGuidanceScore(s);
-    b+=guidanceDelta*2.2;
-    const streakDelta=Math.max(0,next.streak-3)-Math.max(0,s.streak-3);
-    b+=streakDelta*220;
-    if(action.type==='RESET') b-=420;
+    const phaseDelta=deepPhaseStrategyScore(next)-deepPhaseStrategyScore(s);
+    b+=Math.max(-1800,Math.min(1800,phaseDelta*.015));
+
+    // During setup, Draw is allowed when it advances the inventory plan.
+    if(action.type==='DRAW' && s.stockQueue.length>0 && s.streak<=2) b+=180;
+
+    // Once stock is exhausted, Reset is a major strategic interruption.
+    if(action.type==='RESET' && s.stockQueue.length===0) b-=900;
+
+    // Avoid treating a 1–2 action setup streak as sacred.
+    if(action.type==='DRAW' && s.stockQueue.length>0 && s.streak<=2) b+=s.streak*80;
   }
   if(next.gameOver)b+=1000000;
   return b;
@@ -1912,6 +1980,7 @@ function betterCompleted(a,b){
   return a.path.length<b.path.length;
 }
 
+
 function endgameGuidanceScore(s){
   if(activeSearchFlavor!=='DEEP') return 0;
   const best=solverEndgameAnalysis?.candidates?.[0];
@@ -1920,27 +1989,115 @@ function endgameGuidanceScore(s){
   for(const job of (best.jobs||[])){
     const target=Number(job.target), partner=Number(job.partner);
     if(!target || s.tileData[target]===null) continue;
-    if(job.kind==='CLEAR_SELF') continue;
-    if(!partner) continue;
+    if(job.kind==='CLEAR_SELF' || !partner) continue;
     const partnerAlive=partner>=29
       ? s.tileData[partner]!==null
       : (s.tileData[partner]!==null || (s.hold && Number(s.hold.sourceId)===partner));
-    value += partnerAlive ? 140 : -850;
+    value += partnerAlive ? 130 : -700;
   }
   const litp=Number(best.inventoryTarget?.litp?.tileId);
   if(litp && s.tileData[1]!==null){
-    value += s.tileData[litp]!==null ? 420 : -1200;
+    value += s.tileData[litp]!==null ? 340 : -900;
   }
   return value;
 }
+
+function deepPhaseStrategyScore(s){
+  if(activeSearchFlavor!=='DEEP') return 0;
+
+  const stockLeft=s.stockQueue.length;
+  const immediate=immediateScoringCount(s);
+  const cleared=clearedPyramidCount(s);
+  const wave=inventoryWavePotential(s);
+  const nextDeployment=nextDeploymentPotential(s);
+  const alignment=holdInventoryAlignment(s);
+  const resets=s.resetsUsed||0;
+  let score=0;
+
+  if(stockLeft>0){
+    // SETUP PHASE:
+    // Human-style play often tolerates a short micro-streak while continuing
+    // to shape the inventory before committing to the long scoring run.
+    const micro=Math.min(s.streak,2);
+    score += micro*9000;
+    if(s.streak>3) score -= (s.streak-3)*11000;
+    score += wave*80 + nextDeployment*30 + alignment*110;
+    score += exposedPyramidCount(s)*1400 + immediate*1000;
+    score += cleared*700;
+  }else{
+    // LAUNCH / ENDGAME PHASE:
+    // Once the initial stock has been exposed, preserving the long streak is
+    // much more valuable than accumulating modest local progress.
+    const long=Math.max(0,s.streak-2);
+    score += long*long*3200;
+    score += immediate*4800;
+    score += wave*45 + alignment*90;
+    score -= resets*36000;
+  }
+
+  score += endgameGuidanceScore(s)*70;
+
+  if(deepTeacherProfile){
+    // Only broad strategy traits are used. No move IDs or recorded move order.
+    if(Number.isFinite(deepTeacherProfile.resets)){
+      const excess=Math.max(0,resets-deepTeacherProfile.resets);
+      score -= excess*28000;
+    }
+    if(Number.isFinite(deepTeacherProfile.longestStreak)){
+      const target=Math.max(5,deepTeacherProfile.longestStreak);
+      const progress=Math.min(s.streak,target)/target;
+      if(stockLeft===0) score += Math.round(progress*progress*180000);
+    }
+    if(Number.isFinite(deepTeacherProfile.microStreakMax) && stockLeft>0){
+      const preferred=Math.max(1,Math.min(3,deepTeacherProfile.microStreakMax));
+      score -= Math.abs(Math.min(s.streak,4)-preferred)*2200;
+    }
+  }
+
+  return score;
+}
 function deepStrategicBonus(s){
   if(activeSearchFlavor!=='DEEP') return 0;
-  const longStreak=Math.max(0,s.streak-3);
-  return longStreak*longStreak*1500
-    + endgameGuidanceScore(s)*95
-    + nextDeploymentPotential(s)*22
-    + postResetLaunchBonus(s)*16
-    - (s.resetsUsed||0)*26000;
+  return deepPhaseStrategyScore(s);
+}
+
+function deepDiversityBucket(node){
+  const s=node.state;
+  const resetBand=Math.min(3,s.resetsUsed||0);
+  const stockBand=Math.floor(s.stockQueue.length/6);
+  const streakBand=Math.min(5,Math.floor((s.streak||0)/4));
+  const holdBand=s.hold?1:0;
+  const clearBand=Math.min(5,Math.floor(clearedPyramidCount(s)/5));
+  return `${resetBand}|${stockBand}|${streakBand}|${holdBand}|${clearBand}`;
+}
+function selectDeepFrontier(nodes,width){
+  if(activeSearchFlavor!=='DEEP') return nodes.slice(0,width);
+  const eliteCount=Math.min(nodes.length,Math.max(60,Math.floor(width*.55)));
+  const selected=nodes.slice(0,eliteCount);
+  const used=new Set(selected);
+  const buckets=new Map();
+
+  for(const node of nodes.slice(eliteCount)){
+    const key=deepDiversityBucket(node);
+    if(!buckets.has(key)) buckets.set(key,[]);
+    buckets.get(key).push(node);
+  }
+
+  const lists=[...buckets.values()];
+  let round=0;
+  while(selected.length<width && lists.length){
+    let added=false;
+    for(const list of lists){
+      if(selected.length>=width) break;
+      if(round<list.length){
+        const node=list[round];
+        if(!used.has(node)){selected.push(node);used.add(node);added=true;}
+      }
+    }
+    if(!added) break;
+    round++;
+  }
+  return selected.slice(0,width);
 }
 function planRank(node){
   const s=node.state, cleared=clearedPyramidCount(s), inv=inventoryUsedCount(s);
@@ -2153,7 +2310,7 @@ async function searchBestPlan(perfectProbe=null,config={}){
     }
 
     nextNodes.sort((a,b)=>b.rank-a.rank);
-    frontier=nextNodes.slice(0,beamWidth);
+    frontier=selectDeepFrontier(nextNodes,beamWidth);
 
     if(depth%yieldEvery===0){
       updatePlanPanel(result,`${phaseName}: depth ${depth+1}; frontier ${frontier.length.toLocaleString()}; ${result.statesExamined.toLocaleString()} states; best ${result.bestCompletedScore?.toLocaleString()||'—'}.`);
@@ -2197,12 +2354,14 @@ function betterPlanRun(a,b){
 async function runProgressiveDeepSearch(perfectProbe){
   const passes=[
     {name:'STANDARD BASELINE',flavor:'STANDARD',stateLimit:100000,beamWidth:640,maxDepth:100,timeMs:9000},
-    {name:'DEEP PASS 1',flavor:'DEEP',stateLimit:250000,beamWidth:1200,maxDepth:120,timeMs:22000},
-    {name:'DEEP PASS 2',flavor:'DEEP',stateLimit:600000,beamWidth:2200,maxDepth:140,timeMs:38000}
+    {name:'DEEP STRATEGY 1',flavor:'DEEP',stateLimit:250000,beamWidth:1200,maxDepth:120,timeMs:22000},
+    {name:'DEEP STRATEGY 2',flavor:'DEEP',stateLimit:600000,beamWidth:2200,maxDepth:140,timeMs:38000}
   ];
 
   let best=null;
   solverDeepStats.passes=[];
+  solverDeepStats.teacherProfileUsed=!!deepTeacherProfile;
+  solverDeepStats.teacherProfile=deepTeacherProfile?JSON.parse(JSON.stringify(deepTeacherProfile)):null;
 
   for(let i=0;i<passes.length;i++){
     if(solverDeadline && performance.now()>=solverDeadline) break;
@@ -2356,11 +2515,13 @@ async function prepareSolverPlan(){
     perfectProbe:{elapsedMs:0,truncated:false,states:0},
     fullSearch:{elapsedMs:0,truncated:false,states:0}
   };
-  solverDeepStats={enabled:SOLVER_DEPTH_MODE==='DEEP',standardBaselineScore:null,selectedScore:null,improvement:0,passes:[]};
+  solverDeepStats={enabled:SOLVER_DEPTH_MODE==='DEEP',standardBaselineScore:null,selectedScore:null,improvement:0,teacherProfileUsed:false,teacherProfile:null,passes:[]};
   calc.textContent='ENDGAME';
   solverSessionStats={decisions:0,totalNodes:0,duplicates:0,deadBranches:0,limitHits:0};
   solverActualSeen=new Map(); solverPlan=[]; solverPlanIndex=0; solverPlanResult=null;
-  solverMemoryInfo={signature:currentPuzzleSignature(state),knownDemos:findKnownDemos(state)}; renderMemoryInfo();
+  solverMemoryInfo={signature:currentPuzzleSignature(state),knownDemos:findKnownDemos(state)};
+  deepTeacherProfile=selectDeepTeacherProfile();
+  renderMemoryInfo();
   if(memoryUseMode==='REPLAY' && solverMemoryInfo.knownDemos.length){
     clearSolverPhaseBudget();
     const known=solverMemoryInfo.knownDemos[0], path=demoPathFor(known);

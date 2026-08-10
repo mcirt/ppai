@@ -11,7 +11,7 @@
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.9 — Standard + Deep Search</div>
+<div class="version">PPAI JS v0.9.1 — Smarter Deep Search</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
@@ -62,7 +62,7 @@
     <button id="importDemoButton">Import Demo Library</button>
     <select id="memoryUseMode" title="How solver may use saved demonstrations">
       <option value="INDEPENDENT">Solve Independently</option>
-      <option value="INFORMED">Demo-Informed</option>
+      <option value="INFORMED">Demo-Informed Strategy (no replay)</option>
       <option value="REPLAY">Use Known Demo if Available</option>
     </select>
   </div>
@@ -77,7 +77,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.9'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.9.1'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
