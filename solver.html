@@ -73,7 +73,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.7.1</div>
+<div class="version">Puzzle Pyramid AI JS v0.7.2</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -97,7 +97,7 @@ h1 { text-align:center; margin:0 0 4px; }
   <button id="pause-solver-button">Pause Solver</button>
   <button id="forward-step-button">Forward Step</button>
 </div>
-<div class="solver-note">v0.7.1 first validates backward endgame hypotheses, then runs a capped reachability search from the real starting puzzle to verify those endings can be reached while preserving required resources. It then validates LITP and pre/post lanes before the dedicated 8260 Perfect Score Probe. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
+<div class="solver-note">v0.7.2 validates backward endgame hypotheses, then runs a shared-budget reachability phase from the real starting puzzle. Reachability can be REACHABLE, UNREACHABLE, or UNKNOWN when the budget expires. The page yields during this phase so iPhone Safari stays responsive. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -140,7 +140,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.7.1-endgame-reachability-fix';
+const VERSION='Puzzle Pyramid AI JS v0.7.2-reachability-budgeted';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -351,7 +351,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'endgame-reachability-diagnostic-v0.7.1',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'endgame-reachability-diagnostic-v0.7.2',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 
@@ -922,10 +922,36 @@ function reachabilityRank(node,plan){
     + immediateScoringCount(s)*300 - (s.resetsUsed||0)*600 - node.path.length*6;
 }
 
-function searchReachableEndgame(plan,startState){
+async function searchReachableEndgame(plan,startState,phaseBudget,progressLabel=''){
   const reserved=reservedResourcesForPlan(plan);
   const start={state:simClone(startState),path:[]};
-  const MAX_DEPTH=34, BEAM=90, STATE_LIMIT=4500;
+
+  // Smaller per-candidate search, but all candidates now share one hard phase budget.
+  const MAX_DEPTH=30;
+  const BEAM=60;
+  const LOCAL_STATE_LIMIT=2500;
+  const YIELD_EVERY=180;
+
+  // Genuine contradiction checks are marked UNREACHABLE.
+  for(const id of reserved.inventory){
+    if(startState.tileData[id]===null){
+      return {
+        status:'UNREACHABLE',reachable:false,reason:`reserved inventory ${id} is already gone`,
+        statesExamined:0,pathLength:null,resourceViolationPrunes:0
+      };
+    }
+  }
+  for(const id of reserved.pyramid){
+    if(id<=6) continue;
+    const exists=startState.tileData[id]!==null ||
+      (startState.hold && Number(startState.hold.sourceId)===id);
+    if(!exists){
+      return {
+        status:'UNREACHABLE',reachable:false,reason:`reserved pyramid ${id} is already gone`,
+        statesExamined:0,pathLength:null,resourceViolationPrunes:0
+      };
+    }
+  }
 
   let frontier=[start], examined=0, found=null;
   let best=start, bestRank=reachabilityRank(start,plan), resourceViolationPrunes=0;
@@ -933,8 +959,24 @@ function searchReachableEndgame(plan,startState){
   for(let depth=0;depth<=MAX_DEPTH && frontier.length;depth++){
     const next=[];
     for(const node of frontier){
+      if(phaseBudget.used>=phaseBudget.limit){
+        return {
+          status:'UNKNOWN',reachable:false,reason:'shared reachability budget exhausted',
+          statesExamined:examined,pathLength:null,resourceViolationPrunes,
+          bestProgressPathLength:best.path.length,bestProgressRank:bestRank
+        };
+      }
+      if(examined>=LOCAL_STATE_LIMIT){
+        return {
+          status:'UNKNOWN',reachable:false,reason:'per-candidate reachability budget exhausted',
+          statesExamined:examined,pathLength:null,resourceViolationPrunes,
+          bestProgressPathLength:best.path.length,bestProgressRank:bestRank
+        };
+      }
+
       examined++;
-      if(examined>STATE_LIMIT) break;
+      phaseBudget.used++;
+
       if(isReachabilityGoal(node.state,plan)){ found=node; break; }
       if(depth===MAX_DEPTH) continue;
 
@@ -944,28 +986,40 @@ function searchReachableEndgame(plan,startState){
 
         const n=simApplyAction(node.state,action);
         if(!n) continue;
+
         const child={state:n,path:[...node.path,action]};
         child.rank=reachabilityRank(child,plan)-penalty;
         if(child.rank>bestRank){ best=child; bestRank=child.rank; }
         next.push(child);
       }
+
+      if(phaseBudget.used % YIELD_EVERY===0){
+        const el=document.getElementById('planProgress');
+        if(el){
+          el.textContent=`Reachability ${progressLabel}: ${phaseBudget.used.toLocaleString()} / ${phaseBudget.limit.toLocaleString()} shared states checked…`;
+        }
+        await new Promise(r=>setTimeout(r,0));
+      }
     }
-    if(found || examined>STATE_LIMIT) break;
+
+    if(found) break;
     next.sort((a,b)=>b.rank-a.rank);
     frontier=next.slice(0,BEAM);
   }
 
+  if(found){
+    return {
+      status:'REACHABLE',reachable:true,reason:'resource-preserving path found',
+      statesExamined:examined,pathLength:found.path.length,resourceViolationPrunes,
+      bestProgressPathLength:found.path.length,bestProgressRank:reachabilityRank(found,plan)
+    };
+  }
+
+  // Because beam pruning is used, failure to find a path is not proof of impossibility.
   return {
-    reachable:!!found,
-    statesExamined:examined,
-    maxDepth:MAX_DEPTH,
-    stateLimit:STATE_LIMIT,
-    resourceViolationPrunes,
-    pathLength:found?found.path.length:null,
-    bestProgressPathLength:best.path.length,
-    bestProgressRank:bestRank,
-    path:found?found.path:[],
-    bestProgressPath:best.path
+    status:'UNKNOWN',reachable:false,reason:'search ended without proof',
+    statesExamined:examined,pathLength:null,resourceViolationPrunes,
+    bestProgressPathLength:best.path.length,bestProgressRank:bestRank
   };
 }
 
@@ -1010,7 +1064,7 @@ function candidateSignature(candidate){
   return candidate.inventoryTarget.structuralExecution
     .map(j=>`${j.kind}:${j.partner??'SELF'}>${j.target}`).join('|');
 }
-function analyzeEndgamePlans(s){
+async function analyzeEndgamePlans(s){
   const optionCounts={}; let totalComplementOptions=0;
   for(const t of ENDGAME_CORE_TARGETS){
     const n=endgamePartnerOptions(s,t).length;
@@ -1066,23 +1120,61 @@ function analyzeEndgamePlans(s){
     return {p,validation,inventoryTarget,tile1Job,preliminaryScore};
   }).sort((a,b)=>b.preliminaryScore-a.preliminaryScore);
 
-  const expanded=preExpanded.map((x,index)=>{
+  const REACHABILITY_PHASE_BUDGET=12000;
+  const phaseBudget={used:0,limit:REACHABILITY_PHASE_BUDGET};
+  const expanded=[];
+
+  for(let index=0;index<preExpanded.length;index++){
+    const x=preExpanded[index];
     const {p,validation,inventoryTarget,tile1Job,preliminaryScore}=x;
-    const shouldTest=validation.executable && index<ENDGAME_REACHABILITY_TEST_LIMIT;
-    const reachability=shouldTest
-      ? searchReachableEndgame(p,s)
-      : {reachable:false,skipped:validation.executable,statesExamined:0,resourceViolationPrunes:0,pathLength:null};
+    const shouldTest=validation.executable && index<ENDGAME_REACHABILITY_TEST_LIMIT && phaseBudget.used<phaseBudget.limit;
+
+    let reachability;
+    if(shouldTest){
+      reachability=await searchReachableEndgame(
+        p,s,phaseBudget,
+        `candidate ${Math.min(index+1,ENDGAME_REACHABILITY_TEST_LIMIT)}/${ENDGAME_REACHABILITY_TEST_LIMIT}`
+      );
+    }else if(validation.executable){
+      reachability={
+        status:'UNKNOWN',reachable:false,skipped:true,
+        reason:phaseBudget.used>=phaseBudget.limit?'shared phase budget already exhausted':'candidate below reachability test cutoff',
+        statesExamined:0,resourceViolationPrunes:0,pathLength:null
+      };
+    }else{
+      reachability={
+        status:'UNREACHABLE',reachable:false,skipped:false,
+        reason:'endgame sequence itself is invalid',
+        statesExamined:0,resourceViolationPrunes:0,pathLength:null
+      };
+    }
+
     const laneValidation=validateLITPLanes(p,s,reachability);
-    const sequenceScore=preliminaryScore
-      + (reachability.reachable?1600:(reachability.skipped?-400:-1800))
-      + (laneValidation.valid?450:-500);
-    return {p,validation,inventoryTarget,tile1Job,reachability,laneValidation,sequenceScore};
-  }).sort((a,b)=>b.sequenceScore-a.sequenceScore);
+    const reachabilityBonus=
+      reachability.status==='REACHABLE' ? 1600 :
+      reachability.status==='UNREACHABLE' ? -1800 :
+      -150;
+    const laneBonus=laneValidation.valid?450:-250;
 
-  const accepted=expanded.filter(x=>x.validation.executable && x.reachability.reachable && x.laneValidation.valid);
-  const rejected=expanded.filter(x=>!(x.validation.executable && x.reachability.reachable && x.laneValidation.valid));
+    const sequenceScore=preliminaryScore + reachabilityBonus + laneBonus;
+    expanded.push({p,validation,inventoryTarget,tile1Job,reachability,laneValidation,sequenceScore});
 
-  const candidates=accepted.slice(0,ENDGAME_KEEP_CANDIDATES).map((x,index)=>{
+    if(index<ENDGAME_REACHABILITY_TEST_LIMIT){
+      const el=document.getElementById('planProgress');
+      if(el){
+        el.textContent=`Reachability candidate ${index+1}/${ENDGAME_REACHABILITY_TEST_LIMIT}: ${phaseBudget.used.toLocaleString()} / ${phaseBudget.limit.toLocaleString()} shared states used.`;
+      }
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+
+  expanded.sort((a,b)=>b.sequenceScore-a.sequenceScore);
+
+  const accepted=expanded.filter(x=>x.validation.executable && x.reachability.status==='REACHABLE' && x.laneValidation.valid);
+  const rejected=expanded.filter(x=>x.reachability.status==='UNREACHABLE' || !x.validation.executable);
+
+  const displayPool=(accepted.length?accepted:expanded.filter(x=>x.validation.executable && x.reachability.status==='UNKNOWN'));
+  const candidates=displayPool.slice(0,ENDGAME_KEEP_CANDIDATES).map((x,index)=>{
     const {p,validation,inventoryTarget,tile1Job,sequenceScore}=x;
     return {
       id:`EG-${index+1}`,rank:index+1,structuralScore:p.score,sequenceScore,validation,
@@ -1114,11 +1206,15 @@ function analyzeEndgamePlans(s){
     topCandidateHardConflicts:best?.validation?.hardConflicts??null,
     topCandidateUnresolvedJobs:best?.validation?.unresolvedJobs??null,
     rejectedBySequenceSimulation:expanded.filter(x=>!x.validation.simulationPassed).length,
-    rejectedByReachability:expanded.filter(x=>x.validation.simulationPassed && !x.reachability.reachable && !x.reachability.skipped).length,
+    rejectedByReachability:expanded.filter(x=>x.reachability.status==='UNREACHABLE').length,
+    reachabilityUnknown:expanded.filter(x=>x.reachability.status==='UNKNOWN').length,
     reachabilityTestsSkipped:expanded.filter(x=>x.reachability.skipped).length,
-    rejectedByLaneValidation:expanded.filter(x=>x.validation.simulationPassed && x.reachability.reachable && !x.laneValidation.valid).length,
-    reachableCandidates:expanded.filter(x=>x.reachability.reachable).length,
-    topCandidateReachable:best?.reachability?.reachable??false,
+    rejectedByLaneValidation:expanded.filter(x=>x.reachability.status==='REACHABLE' && !x.laneValidation.valid).length,
+    reachableCandidates:expanded.filter(x=>x.reachability.status==='REACHABLE').length,
+    reachabilityPhaseStatesUsed:phaseBudget.used,
+    reachabilityPhaseStateLimit:phaseBudget.limit,
+    topCandidateReachabilityStatus:best?.reachability?.status??null,
+    topCandidateReachable:best?.reachability?.status==='REACHABLE',
     topCandidateReachabilityPathLength:best?.reachability?.pathLength??null,
     topCandidateReachabilityStates:best?.reachability?.statesExamined??null,
     topCandidateLaneValid:best?.laneValidation?.valid??false,
@@ -1139,9 +1235,9 @@ function analyzeEndgamePlans(s){
 
   return {
     mode:'DIAGNOSTIC_ONLY',
-    plannerVersion:'v0.7.1-endgame-reachability-fix',
+    plannerVersion:'v0.7.2-reachability-budgeted',
     coreTargets:[...ENDGAME_CORE_TARGETS],
-    explanation:'Uses the complement map exhaustively, simulates each proposed endgame, then searches from the real starting puzzle for a path that reaches that endgame corridor while preserving its required resources. LITP and pre/post lanes are validated only on reachable candidates. The full-plan search is still not forced to follow the result.',
+    explanation:'Uses the complement map exhaustively, simulates each proposed endgame, then performs a shared-budget reachability proof attempt from the real starting puzzle. Results are REACHABLE, UNREACHABLE only for genuine contradictions, or UNKNOWN when proof is not found within budget. LITP and lanes are confirmed only on REACHABLE candidates. The full-plan search is still not forced to follow the result.',
     progressMetrics,
     candidateCount:candidates.length,
     selectedForDisplay:best?.id||null,
@@ -1166,7 +1262,7 @@ function renderEndgameAnalysis(a){
   const litp=best.inventoryTarget.litp.determined
     ? `LITP ${best.inventoryTarget.litp.tileId} (${best.inventoryTarget.litp.emoji})`
     : 'LITP not yet determined';
-  summary.textContent=`Diagnostic only — ${t1}. ${litp}. Sequence ${best.validation.simulationPassed?'PASS':'FAIL'}; reachability ${best.reachability?.reachable?'PASS':'FAIL'}; lanes ${best.laneValidation?.valid?'PASS':'FAIL'}; feasibility ${best.validation.feasibilityScore}/100.`;
+  summary.textContent=`Diagnostic only — ${t1}. ${litp}. Sequence ${best.validation.simulationPassed?'PASS':'FAIL'}; reachability ${best.reachability?.status||'UNKNOWN'}; lanes ${best.laneValidation?.valid?'PASS':'UNCONFIRMED'}; feasibility ${best.validation.feasibilityScore}/100.`;
 
   const lines=best.inventoryTarget.structuralExecution.map((j,i)=>`${i+1}. ${j.label}`);
   const protect=best.inventoryTarget.protectedInventoryIds.length
@@ -1178,7 +1274,7 @@ function renderEndgameAnalysis(a){
   const lanes=best.inventoryTarget.lanes.available
     ? `LITP lanes: pre ${best.inventoryTarget.lanes.preLaneLabel}; post ${best.inventoryTarget.lanes.postLaneLabel}`
     : 'LITP lanes unavailable.';
-  const metrics=`Progress: complement options ${m.totalComplementOptions}; sequence rejects ${m.rejectedBySequenceSimulation}; reachability rejects ${m.rejectedByReachability}; reachability skipped ${m.reachabilityTestsSkipped}; lane rejects ${m.rejectedByLaneValidation}; fully viable ${m.executableCandidates}; core coverage ${m.coreCoveragePercent}%.`;
+  const metrics=`Progress: complement options ${m.totalComplementOptions}; sequence rejects ${m.rejectedBySequenceSimulation}; reachability reachable ${m.reachableCandidates}; unreachable ${m.rejectedByReachability}; unknown ${m.reachabilityUnknown}; shared states ${m.reachabilityPhaseStatesUsed}/${m.reachabilityPhaseStateLimit}; lane rejects ${m.rejectedByLaneValidation}; confirmed viable ${m.executableCandidates}.`;
   body.textContent=`Top reasoned endgame (earlier → later):\n${lines.join('\n')}\n${protect}\n${holds}\n${lanes}\n${metrics}`;
 }
 
@@ -1930,7 +2026,7 @@ async function prepareSolverPlan(){
   calc.textContent='Calculating…';
   solverSessionStats={decisions:0,totalNodes:0,duplicates:0,deadBranches:0,limitHits:0};
   solverActualSeen=new Map(); solverPlan=[]; solverPlanIndex=0; solverPlanResult=null;
-  solverEndgameAnalysis=analyzeEndgamePlans(simClone(state));
+  solverEndgameAnalysis=await analyzeEndgamePlans(simClone(state));
   renderEndgameAnalysis(solverEndgameAnalysis);
   setStatus('Endgame-first diagnostic complete. Checking the known 8260 setup combinations next…');
   document.getElementById('planProgress').textContent='Endgame hypotheses preserved; 8260 Perfect Score Probe starting…';
