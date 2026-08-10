@@ -11,13 +11,19 @@
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.8 — Teacher + Demo Memory Infrastructure</div>
+<div class="version">PPAI JS v0.8.1 — Teacher + Demo Memory + Mobile Layout</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
 <div class="section-label">Emoji Keyboard</div>
 <div class="emoji-keyboard" id="emojiKeyboard"></div>
 <div id="status" class="status">Next input: Tile 1 of 52</div>
+
+<div class="button-grid">
+<button id="deleteButton" class="action-button">Delete Last Input</button><button id="clearButton" class="action-button">Clear Board</button>
+<button id="playButton" class="action-button">Play Puzzle</button><button id="solveButton" class="action-button">Solve Puzzle</button>
+<button id="saveButton" class="action-button">Save Puzzle</button><button id="uploadButton" class="action-button">Upload Puzzle</button>
+</div>
 
 <div class="panel">
   <h2>Endgame Teacher Mode</h2>
@@ -55,17 +61,13 @@
   <div class="memory-note">Working memory is stored in this browser. Export the library JSON to keep a permanent copy in GitHub or move it to another device.</div>
 </div>
 
-<div class="button-grid">
-<button id="deleteButton" class="action-button">Delete Last Input</button><button id="clearButton" class="action-button">Clear Board</button>
-<button id="playButton" class="action-button">Play Puzzle</button><button id="solveButton" class="action-button">Solve Puzzle</button>
-<button id="saveButton" class="action-button">Save Puzzle</button><button id="uploadButton" class="action-button">Upload Puzzle</button>
-</div>
+
 <input type="file" id="fileInput" hidden accept=".json,application/json">
 <input type="file" id="demoFileInput" hidden accept=".json,application/json">
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.8'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.8.1'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
