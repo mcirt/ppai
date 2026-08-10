@@ -73,7 +73,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.8.2</div>
+<div class="version">Puzzle Pyramid AI JS v0.8.3</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -145,7 +145,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.8.2-reachability-cooperative';
+const VERSION='Puzzle Pyramid AI JS v0.8.3-reachability-runtime-fix';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -356,7 +356,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'teacher-memory-reachability-cooperative-v0.8.2',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'teacher-memory-reachability-runtime-fix-v0.8.3',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
 demoMovesUsed:(solverPlanResult?.memoryReplay?solverPlan.length:0),
 phaseStats:solverPhaseStats,
 memory:{useMode:memoryUseMode,info:solverMemoryInfo},endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
@@ -1321,13 +1321,16 @@ async function analyzeEndgamePlans(s){
   solverPhaseStats.reachability.truncated=reachabilityWallTruncated;
   solverPhaseStats.reachability.states=phaseBudget.used;
   clearSolverPhaseBudget();
+  document.getElementById('planProgress').textContent=
+    `REACHABILITY complete: ${phaseBudget.used.toLocaleString()} states; continuing to next phase…`;
+  await solverYield(reachabilityWallTruncated?'REACHABILITY UNKNOWN':'REACHABILITY DONE');
 
   const accepted=expanded.filter(x=>x.validation.executable && x.reachability.status==='REACHABLE' && x.laneValidation.valid);
   const rejected=expanded.filter(x=>x.reachability.status==='UNREACHABLE' || !x.validation.executable);
 
   const displayPool=(accepted.length?accepted:expanded.filter(x=>x.validation.executable && x.reachability.status==='UNKNOWN'));
   const candidates=displayPool.slice(0,ENDGAME_KEEP_CANDIDATES).map((x,index)=>{
-    const {p,validation,inventoryTarget,tile1Job,sequenceScore}=x;
+    const {p,validation,inventoryTarget,tile1Job,reachability,laneValidation,sequenceScore}=x;
     return {
       id:`EG-${index+1}`,rank:index+1,structuralScore:p.score,sequenceScore,validation,
       reachability,laneValidation,
@@ -1392,7 +1395,7 @@ async function analyzeEndgamePlans(s){
 
   return {
     mode:'DIAGNOSTIC_ONLY',
-    plannerVersion:'v0.8.2-reachability-cooperative',
+    plannerVersion:'v0.8.3-reachability-runtime-fix',
     coreTargets:[...ENDGAME_CORE_TARGETS],
     explanation:'Uses the complement map exhaustively, simulates each proposed endgame, then performs a shared-budget reachability proof attempt from the real starting puzzle. Results are REACHABLE, UNREACHABLE only for genuine contradictions, or UNKNOWN when proof is not found within budget. LITP and lanes are confirmed only on REACHABLE candidates. The full-plan search is still not forced to follow the result.',
     progressMetrics,
@@ -2262,7 +2265,19 @@ function pauseSolver(){ solverRunning=false; }
 makePyramid(); loadInitialState();
 document.getElementById('start-solver-button').disabled=true;
 document.getElementById('forward-step-button').disabled=true;
-setTimeout(()=>prepareSolverPlan(),0);
+setTimeout(()=>{
+  prepareSolverPlan().catch(err=>{
+    console.error('PPAI solver preparation failed:',err);
+    solverRunning=false;
+    const calc=document.getElementById('calculated-score-value');
+    if(calc) calc.textContent='ERROR';
+    const progress=document.getElementById('planProgress');
+    if(progress) progress.textContent=`Solver error: ${err?.message||err}`;
+    setStatus(`Solver calculation stopped with an error: ${err?.message||err}`);
+    document.getElementById('start-solver-button').disabled=true;
+    document.getElementById('forward-step-button').disabled=true;
+  });
+},0);
 document.getElementById('draw-button').addEventListener('click',async()=>{ if(state.stockQueue.length){ await previewDraw({position:1,total:1}); draw(); } else { await previewReset(); resetStock(); } });
 document.getElementById('undo-button').addEventListener('click',undo);
 document.getElementById('download-button').addEventListener('click',downloadLog);
