@@ -11,7 +11,7 @@
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.8.1 — Teacher + Demo Memory + Mobile Layout</div>
+<div class="version">PPAI JS v0.9 — Standard + Deep Search</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
@@ -23,6 +23,16 @@
 <button id="deleteButton" class="action-button">Delete Last Input</button><button id="clearButton" class="action-button">Clear Board</button>
 <button id="playButton" class="action-button">Play Puzzle</button><button id="solveButton" class="action-button">Solve Puzzle</button>
 <button id="saveButton" class="action-button">Save Puzzle</button><button id="uploadButton" class="action-button">Upload Puzzle</button>
+</div>
+
+
+<div class="panel">
+  <h2>Solver Search Depth</h2>
+  <div class="mode-row">
+    <button class="mode-btn depth-btn" data-depth="STANDARD">STANDARD</button>
+    <button class="mode-btn depth-btn" data-depth="DEEP">DEEP</button>
+  </div>
+  <div id="depthNote" class="hint-note"></div>
 </div>
 
 <div class="panel">
@@ -67,11 +77,12 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.8.1'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.9'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
 let solverMode=localStorage.getItem('ppaiSolverMode')||'AUTO';
+let solverDepthMode=localStorage.getItem('ppaiSolverDepthMode')||'STANDARD';
 let hints=JSON.parse(localStorage.getItem('solverHints')||'{"t1":null,"t2":null,"t3":null,"t4":null,"t5":null,"t6":null,"litp":null}');
 let activeHintKey=null;
 const statusElement=document.getElementById('status');
@@ -87,9 +98,18 @@ function makeKeyboard(){const k=document.getElementById('emojiKeyboard');for(let
 function recalc(){currentTile=1;while(currentTile<=52&&normalizeEmoji(tileData[currentTile]))currentTile++;updateStatus()}
 function enterEmoji(key,button){if(selectedTileId!==null){const id=selectedTileId;tileData[id]=key;setTileValue(id,key);clearTileSelection();recalc();updateStatus(`Tile ${id} updated to ${key}.`)}else{if(currentTile>52){updateStatus('All 52 tiles are filled. Tap a tile to edit it.');return}tileData[currentTile]=key;setTileValue(currentTile,key);currentTile++;updateStatus()}document.querySelectorAll('.emoji-key.active').forEach(x=>x.classList.remove('active'));button.classList.add('active');setTimeout(()=>button.classList.remove('active'),140)}
 function boardHasData(){return Object.values(tileData).some(normalizeEmoji)}
-function openDestination(fileName,windowName){if(!boardHasData()){updateStatus('Enter at least one emoji first.');return}localStorage.setItem('tileData',JSON.stringify(tileData));localStorage.setItem('ppaiVersion',VERSION);localStorage.setItem('sourceFilename',currentFilename||'');localStorage.setItem('solverHints',JSON.stringify(hints));localStorage.setItem('ppaiSolverMode',solverMode);localStorage.setItem('ppaiMemoryUseMode',document.getElementById('memoryUseMode').value);const w=window.open(fileName,windowName);if(!w)location.href=fileName}
+function openDestination(fileName,windowName){if(!boardHasData()){updateStatus('Enter at least one emoji first.');return}localStorage.setItem('tileData',JSON.stringify(tileData));localStorage.setItem('ppaiVersion',VERSION);localStorage.setItem('sourceFilename',currentFilename||'');localStorage.setItem('solverHints',JSON.stringify(hints));localStorage.setItem('ppaiSolverMode',solverMode);localStorage.setItem('ppaiSolverDepthMode',solverDepthMode);localStorage.setItem('ppaiMemoryUseMode',document.getElementById('memoryUseMode').value);const w=window.open(fileName,windowName);if(!w)location.href=fileName}
 function setFileStatus(){document.getElementById('fileStatus').textContent=currentFilename?`Loaded: ${currentFilename}`:'No file loaded'}
 function setMode(mode){solverMode=mode;localStorage.setItem('ppaiSolverMode',mode);document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));document.getElementById('hintArea').style.opacity=mode==='AUTO'?'.45':'1'}
+function setDepthMode(mode){
+  solverDepthMode=(mode==='DEEP')?'DEEP':'STANDARD';
+  localStorage.setItem('ppaiSolverDepthMode',solverDepthMode);
+  document.querySelectorAll('.depth-btn').forEach(b=>b.classList.toggle('active',b.dataset.depth===solverDepthMode));
+  const note=document.getElementById('depthNote');
+  if(note) note.textContent=solverDepthMode==='DEEP'
+    ? 'Deep first establishes a Standard baseline, then runs wider progressive searches to beat it. Expect longer calculation time and higher battery/CPU use.'
+    : 'Standard uses the current phone-safe solver limits and is the baseline for comparison.';
+}
 document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
 function armHint(key){activeHintKey=(activeHintKey===key)?null:key;document.querySelectorAll('.hint').forEach(h=>h.classList.toggle('armed',!!activeHintKey&&h.dataset.hkey===activeHintKey));if(activeHintKey)updateStatus(`Hint ${activeHintKey.toUpperCase()} armed — tap any tile 1–52.`)}
 function setHint(key,id){hints[key]=id;localStorage.setItem('solverHints',JSON.stringify(hints));refreshHints()}
@@ -113,9 +133,11 @@ document.getElementById('clearButton').addEventListener('click',()=>{tileData={}
 document.getElementById('playButton').addEventListener('click',()=>openDestination('game.html','Puzzle Pyramid Game'));
 document.getElementById('solveButton').addEventListener('click',()=>openDestination('solver.html','Puzzle Pyramid Solver'));
 function ts(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`}
-document.getElementById('saveButton').addEventListener('click',()=>{if(!boardHasData()){updateStatus('There is no board data to save.');return}const payload={version:VERSION,saveType:'PUZZLE',savedAt:new Date().toISOString(),tileData,hints,solverMode,meta:{source_filename:currentFilename||null,puzzleSignature:canonicalPuzzleSignature(tileData)}};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=currentFilename||`puzzle_pyramid_${ts()}.json`;a.click();URL.revokeObjectURL(a.href);updateStatus('Puzzle saved.')});
+document.getElementById('saveButton').addEventListener('click',()=>{if(!boardHasData()){updateStatus('There is no board data to save.');return}const payload={version:VERSION,saveType:'PUZZLE',savedAt:new Date().toISOString(),tileData,hints,solverMode,solverDepthMode,meta:{source_filename:currentFilename||null,puzzleSignature:canonicalPuzzleSignature(tileData)}};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=currentFilename||`puzzle_pyramid_${ts()}.json`;a.click();URL.revokeObjectURL(a.href);updateStatus('Puzzle saved.')});
 document.getElementById('uploadButton').addEventListener('click',()=>document.getElementById('fileInput').click());
-document.getElementById('fileInput').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result),src=p?.tileData||p,clean={};for(let i=1;i<=52;i++){const v=normalizeEmoji(src?.[i]);if(v)clean[i]=v}tileData=clean;for(let i=1;i<=52;i++)setTileValue(i,tileData[i]||null);if(p?.hints){hints={...hints,...p.hints};if(hints.lit&&!hints.litp)hints.litp=hints.lit;refreshHints()}if(p?.solverMode)setMode(p.solverMode);currentFilename=f.name;localStorage.setItem('sourceFilename',currentFilename);setFileStatus();recalc();updateStatus(`Puzzle loaded. ${statusElement.textContent}`)}catch(err){console.error(err);updateStatus('Could not load that JSON file.')}finally{e.target.value=''}};r.readAsText(f)});
-makeBoard();makeKeyboard();setMode(solverMode);refreshHints();renderDemoLibrary();setFileStatus();document.getElementById('memoryUseMode').value=localStorage.getItem('ppaiMemoryUseMode')||'INDEPENDENT';document.getElementById('memoryUseMode').addEventListener('change',e=>localStorage.setItem('ppaiMemoryUseMode',e.target.value));updateStatus();
+document.getElementById('fileInput').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result),src=p?.tileData||p,clean={};for(let i=1;i<=52;i++){const v=normalizeEmoji(src?.[i]);if(v)clean[i]=v}tileData=clean;for(let i=1;i<=52;i++)setTileValue(i,tileData[i]||null);if(p?.hints){hints={...hints,...p.hints};if(hints.lit&&!hints.litp)hints.litp=hints.lit;refreshHints()}if(p?.solverMode)setMode(p.solverMode);if(p?.solverDepthMode)setDepthMode(p.solverDepthMode);currentFilename=f.name;localStorage.setItem('sourceFilename',currentFilename);setFileStatus();recalc();updateStatus(`Puzzle loaded. ${statusElement.textContent}`)}catch(err){console.error(err);updateStatus('Could not load that JSON file.')}finally{e.target.value=''}};r.readAsText(f)});
+makeBoard();makeKeyboard();setMode(solverMode);setDepthMode(solverDepthMode);
+document.querySelectorAll('.depth-btn').forEach(b=>b.addEventListener('click',()=>setDepthMode(b.dataset.depth)));
+refreshHints();renderDemoLibrary();setFileStatus();document.getElementById('memoryUseMode').value=localStorage.getItem('ppaiMemoryUseMode')||'INDEPENDENT';document.getElementById('memoryUseMode').addEventListener('change',e=>localStorage.setItem('ppaiMemoryUseMode',e.target.value));updateStatus();
 </script>
 </body></html>
