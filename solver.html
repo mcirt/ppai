@@ -73,7 +73,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.9.1 — Smarter Deep</div>
+<div class="version">Puzzle Pyramid AI JS v0.9.2 — Hold Corridor / Bridge</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -97,7 +97,7 @@ h1 { text-align:center; margin:0 0 4px; }
   <button id="pause-solver-button">Pause Solver</button>
   <button id="forward-step-button">Forward Step</button>
 </div>
-<div class="solver-note">v0.9.1 validates backward endgame hypotheses, then runs a shared-budget reachability phase from the real starting puzzle. Reachability can be REACHABLE, UNREACHABLE, or UNKNOWN when the budget expires. The page yields during this phase so iPhone Safari stays responsive. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. Independent solving uses hard wall-clock budgets for ENDGAME, REACHABILITY, 8260 PROBE, and search. STANDARD preserves the phone-safe baseline. DEEP now uses phase-aware strategy: short micro-streaks are acceptable during setup, long streaks are prioritized after inventory exposure, reset cost is phase-sensitive, and a diversity-preserving beam keeps alternative strategy families alive. In Demo-Informed mode, Deep may also use aggregate human strategy traits such as longest streak, reset count, and setup timing — never recorded move IDs or move order. REACHABILITY is a bounded proof attempt: when its budget expires it returns UNKNOWN and the solver continues instead of blocking. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
+<div class="solver-note">v0.9.2 validates backward endgame hypotheses, then runs a shared-budget reachability phase from the real starting puzzle. Reachability can be REACHABLE, UNREACHABLE, or UNKNOWN when the budget expires. The page yields during this phase so iPhone Safari stays responsive. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. Independent solving uses hard wall-clock budgets for ENDGAME, REACHABILITY, 8260 PROBE, and search. STANDARD now adds bounded Hold Corridor awareness while preserving the phone-safe baseline. DEEP uses a longer Hold Corridor / Bridge search plus phase-aware strategy: short micro-streaks are acceptable during setup, long streaks are prioritized after inventory exposure, reset cost is phase-sensitive, and a diversity-preserving beam keeps alternative strategy families alive. In Demo-Informed mode, Deep may also use aggregate human strategy traits such as longest streak, reset count, and setup timing — never recorded move IDs or move order. REACHABILITY is a bounded proof attempt: when its budget expires it returns UNKNOWN and the solver continues instead of blocking. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -145,7 +145,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.9.1-smarter-deep';
+const VERSION='Puzzle Pyramid AI JS v0.9.2-hold-corridor';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -356,7 +356,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'smarter-deep-phase-aware-v0.9.1',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'hold-corridor-bridge-aware-v0.9.2',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true,holdCorridorAwareness:true,holdCorridorStandard:true,holdCorridorDeepPlanner:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
 demoMovesUsed:(solverPlanResult?.memoryReplay?solverPlan.length:0),
 solverDepthMode:SOLVER_DEPTH_MODE,
 learnedStrategyUse:{
@@ -366,6 +366,7 @@ learnedStrategyUse:{
   profile:deepTeacherProfile
 },
 deepSearch:solverDeepStats,
+holdCorridorPlanner:holdCorridorStats,
 phaseStats:solverPhaseStats,
 memory:{useMode:memoryUseMode,info:solverMemoryInfo},endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
@@ -382,6 +383,13 @@ const PERFECT_PROBE_BEAM_WIDTH=900;
 const PERFECT_PROBE_NODE_LIMIT=50000;
 const PERFECT_PROBE_MAX_DEPTH=80;
 const MAX_SOLVER_RESETS=5;
+const STANDARD_HOLD_CORRIDOR_DEPTH=4;
+const STANDARD_HOLD_CORRIDOR_NODE_LIMIT=90;
+const STANDARD_HOLD_CORRIDOR_BEAM=8;
+const DEEP_HOLD_CORRIDOR_DEPTH=10;
+const DEEP_HOLD_CORRIDOR_NODE_LIMIT=520;
+const DEEP_HOLD_CORRIDOR_BEAM=18;
+
 let solverPreviewMs=1000;
 let solverRunning=false;
 let solverSessionStats={decisions:0,totalNodes:0,duplicates:0,deadBranches:0,limitHits:0};
@@ -416,6 +424,17 @@ let solverDeepStats={
   passes:[]
 };
 let deepTeacherProfile=null;
+let holdCorridorStats={
+  calls:0,
+  nodes:0,
+  closuresFound:0,
+  standardCalls:0,
+  deepCalls:0,
+  longestProjectedCorridor:0,
+  bestProjectedValue:0
+};
+const holdCorridorMemo=new Map();
+
 const rawSolverMode=localStorage.getItem('ppaiSolverMode');
 const solverMode=['AUTO','GUIDED','COMPARE'].includes(rawSolverMode)?rawSolverMode:'AUTO';
 const solverHintsRaw=JSON.parse(localStorage.getItem('solverHints')||'{}');
@@ -1705,6 +1724,122 @@ function structuralStateKey(s,includeDepth='',includeResets=true){
 }
 function stateKey(s,depth){ return structuralStateKey(s,depth,true); }
 function effectiveActualKey(s){ return structuralStateKey(s,'actual',false); }
+
+function scoringActionsPreservingHold(s){
+  if(!s.hold) return [];
+  return generateLegalActions(s).filter(a=>{
+    if(a.type==='CLEAR') return true;
+    if(a.type==='MATCH') return a.a?.zone!=='hold' && a.b?.zone!=='hold';
+    return false;
+  });
+}
+function holdClosureOptions(s){
+  if(!s.hold) return [];
+  const h={zone:'hold',tileId:'h'};
+  return simPlayableRefs(s).filter(r=>r.zone!=='hold' && simPair(s,h,r));
+}
+function holdCorridorKey(s,depth,mode){
+  return `${mode}|${depth}|${structuralStateKey(s,'hold-corridor',true)}`;
+}
+function analyzeHoldCorridor(s,opts={}){
+  if(!s?.hold) return {value:0,closureFound:false,projectedScoringMoves:0,nodes:0,newlyExposed:0,reason:'Hold empty'};
+
+  const mode=opts.mode||'STANDARD';
+  const maxDepth=opts.maxDepth??(mode==='DEEP'?DEEP_HOLD_CORRIDOR_DEPTH:STANDARD_HOLD_CORRIDOR_DEPTH);
+  const nodeLimit=opts.nodeLimit??(mode==='DEEP'?DEEP_HOLD_CORRIDOR_NODE_LIMIT:STANDARD_HOLD_CORRIDOR_NODE_LIMIT);
+  const beamWidth=opts.beamWidth??(mode==='DEEP'?DEEP_HOLD_CORRIDOR_BEAM:STANDARD_HOLD_CORRIDOR_BEAM);
+
+  const memoKey=holdCorridorKey(s,maxDepth,mode);
+  const memo=holdCorridorMemo.get(memoKey);
+  if(memo) return memo;
+
+  holdCorridorStats.calls++;
+  if(mode==='DEEP') holdCorridorStats.deepCalls++; else holdCorridorStats.standardCalls++;
+
+  const startingExposed=exposedPyramidCount(s);
+  const start={state:simClone(s),scoringMoves:0,path:[],rank:0};
+  let frontier=[start], nodes=0, best=start, bestValue=0, bestClosure=null;
+
+  const scoreNode=(node)=>{
+    const st=node.state;
+    const exposureGain=Math.max(0,exposedPyramidCount(st)-startingExposed);
+    const immediate=scoringActionsPreservingHold(st).length;
+    const alignment=holdInventoryAlignment(st);
+    return node.scoringMoves*1400 + exposureGain*850 + immediate*300 + alignment*5 + st.streak*90;
+  };
+
+  for(let depth=0; depth<=maxDepth && frontier.length && nodes<nodeLimit; depth++){
+    const next=[];
+    for(const node of frontier){
+      if(nodes>=nodeLimit) break;
+
+      const closures=holdClosureOptions(node.state);
+      if(closures.length){
+        const exposureGain=Math.max(0,exposedPyramidCount(node.state)-startingExposed);
+        const closureValue=2600 + node.scoringMoves*2100 + node.scoringMoves*node.scoringMoves*250
+          + exposureGain*1000 + Math.max(0,node.state.streak-s.streak)*550;
+        if(!bestClosure || closureValue>bestClosure.value){
+          bestClosure={value:closureValue,scoringMoves:node.scoringMoves,closureTarget:closures[0],path:node.path,exposureGain};
+        }
+      }
+
+      if(depth===maxDepth) continue;
+      const ranked=[];
+      for(const action of scoringActionsPreservingHold(node.state)){
+        if(nodes>=nodeLimit) break;
+        nodes++;
+        const n=simApplyAction(node.state,action);
+        if(!n) continue;
+        const child={state:n,scoringMoves:node.scoringMoves+1,path:[...node.path,action]};
+        child.rank=scoreNode(child);
+        ranked.push(child);
+        if(child.rank>bestValue){bestValue=child.rank;best=child;}
+      }
+      ranked.sort((a,b)=>b.rank-a.rank);
+      next.push(...ranked.slice(0,beamWidth));
+    }
+    next.sort((a,b)=>b.rank-a.rank);
+    frontier=next.slice(0,beamWidth);
+  }
+
+  holdCorridorStats.nodes+=nodes;
+  const projectedScoringMoves=bestClosure?.scoringMoves ?? best.scoringMoves ?? 0;
+  const closureFound=!!bestClosure;
+  const newlyExposed=bestClosure?.exposureGain ?? Math.max(0,exposedPyramidCount(best.state)-startingExposed);
+  let value=closureFound ? bestClosure.value : projectedScoringMoves*700 + newlyExposed*500;
+  if(!closureFound && projectedScoringMoves>=3) value+=900;
+
+  const result={
+    value:Math.round(value),
+    closureFound,
+    projectedScoringMoves,
+    newlyExposed,
+    nodes,
+    closureTarget:bestClosure?.closureTarget||null,
+    interiorPath:bestClosure?.path||best.path||[],
+    reason:closureFound
+      ? `Hold corridor closes after ${projectedScoringMoves} scoring move${projectedScoringMoves===1?'':'s'}`
+      : `Open Hold corridor projects ${projectedScoringMoves} scoring move${projectedScoringMoves===1?'':'s'} within search horizon`
+  };
+
+  if(closureFound) holdCorridorStats.closuresFound++;
+  holdCorridorStats.longestProjectedCorridor=Math.max(holdCorridorStats.longestProjectedCorridor,projectedScoringMoves);
+  holdCorridorStats.bestProjectedValue=Math.max(holdCorridorStats.bestProjectedValue,result.value);
+
+  if(holdCorridorMemo.size>3000) holdCorridorMemo.clear();
+  holdCorridorMemo.set(memoKey,result);
+  return result;
+}
+function holdCorridorActionBonus(before,action,after){
+  if(action.type!=='HOLD' || !after?.hold) return 0;
+  const mode=activeSearchFlavor==='DEEP'?'DEEP':'STANDARD';
+  const c=analyzeHoldCorridor(after,{mode});
+
+  if(mode==='STANDARD'){
+    return Math.min(1800,c.projectedScoringMoves*220+c.newlyExposed*160+(c.closureFound?700:0));
+  }
+  return Math.min(5200,c.projectedScoringMoves*420+c.newlyExposed*240+(c.closureFound?1600:0)+Math.round(c.value*.08));
+}
 function quickActionBias(s,action,next){
   let b=0;
   if(action.type==='MATCH'||action.type==='MATCH_HOLD') b+=120;
@@ -1734,6 +1869,9 @@ function quickActionBias(s,action,next){
     const gain=inventoryWavePotential(next)-inventoryWavePotential(s);
     if(s.streak<=3) b+=Math.max(-60,Math.min(220,gain*1.2));
   }
+
+  // v0.9.2 generalized Hold Corridor / Bridge awareness.
+  if(action.type==='HOLD') b+=holdCorridorActionBonus(s,action,next);
 
   // v0.3: reward setup actions for the inventory shape they CREATE AFTER RESET.
   // Removing or holding an inventory tile compresses all later survivors and
@@ -2056,9 +2194,13 @@ function deepPhaseStrategyScore(s){
 
   return score;
 }
+function staticHoldCorridorRunway(s){
+  if(!s.hold) return 0;
+  return scoringActionsPreservingHold(s).length*550 + holdClosureOptions(s).length*900;
+}
 function deepStrategicBonus(s){
   if(activeSearchFlavor!=='DEEP') return 0;
-  return deepPhaseStrategyScore(s);
+  return deepPhaseStrategyScore(s) + staticHoldCorridorRunway(s)*18;
 }
 
 function deepDiversityBucket(node){
@@ -2106,6 +2248,7 @@ function planRank(node){
   return cleared*42000 + inv*12000 + s.score*30 + s.streak*160 + exposedPyramidCount(s)*500 + immediateScoringCount(s)*450
     + wave*65 + alignment*95 + nextDeployment*42 + postResetLaunchBonus(s)*28
     - (s.resetsUsed||0)*1000 - node.path.length*3
+    + (activeSearchFlavor==='STANDARD'?staticHoldCorridorRunway(s)*4:0)
     + deepStrategicBonus(s);
 }
 function updatePlanPanel(result,progressText=''){
@@ -2516,6 +2659,8 @@ async function prepareSolverPlan(){
     fullSearch:{elapsedMs:0,truncated:false,states:0}
   };
   solverDeepStats={enabled:SOLVER_DEPTH_MODE==='DEEP',standardBaselineScore:null,selectedScore:null,improvement:0,teacherProfileUsed:false,teacherProfile:null,passes:[]};
+  holdCorridorStats={calls:0,nodes:0,closuresFound:0,standardCalls:0,deepCalls:0,longestProjectedCorridor:0,bestProjectedValue:0};
+  holdCorridorMemo.clear();
   calc.textContent='ENDGAME';
   solverSessionStats={decisions:0,totalNodes:0,duplicates:0,deadBranches:0,limitHits:0};
   solverActualSeen=new Map(); solverPlan=[]; solverPlanIndex=0; solverPlanResult=null;
