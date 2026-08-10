@@ -73,7 +73,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.1</div>
+<div class="version">Puzzle Pyramid AI JS v0.7.1</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -97,7 +97,7 @@ h1 { text-align:center; margin:0 0 4px; }
   <button id="pause-solver-button">Pause Solver</button>
   <button id="forward-step-button">Forward Step</button>
 </div>
-<div class="solver-note">v0.6 first reconstructs and simulates each backward endgame hypothesis move-by-move, rejects sequences that cannot physically unfold, derives LITP and lanes from the survivors, then runs the dedicated 8260 Perfect Score Probe. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
+<div class="solver-note">v0.7.1 first validates backward endgame hypotheses, then runs a capped reachability search from the real starting puzzle to verify those endings can be reached while preserving required resources. It then validates LITP and pre/post lanes before the dedicated 8260 Perfect Score Probe. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -140,7 +140,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.7-endgame-reachability';
+const VERSION='Puzzle Pyramid AI JS v0.7.1-endgame-reachability-fix';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -351,7 +351,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'endgame-reachability-diagnostic-v0.7',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'endgame-reachability-diagnostic-v0.7.1',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 
@@ -459,6 +459,7 @@ function holdQuality(s){
 const ENDGAME_CORE_TARGETS=[1,2,3,4,5,6];
 const ENDGAME_BEAM_WIDTH=96;
 const ENDGAME_KEEP_CANDIDATES=12;
+const ENDGAME_REACHABILITY_TEST_LIMIT=18;
 
 function blockerClosure(id){
   const seen=new Set(), stack=[...(BLOCKERS[id]||[])];
@@ -924,7 +925,7 @@ function reachabilityRank(node,plan){
 function searchReachableEndgame(plan,startState){
   const reserved=reservedResourcesForPlan(plan);
   const start={state:simClone(startState),path:[]};
-  const MAX_DEPTH=46, BEAM=220, STATE_LIMIT=18000;
+  const MAX_DEPTH=34, BEAM=90, STATE_LIMIT=4500;
 
   let frontier=[start], examined=0, found=null;
   let best=start, bestRank=reachabilityRank(start,plan), resourceViolationPrunes=0;
@@ -937,12 +938,12 @@ function searchReachableEndgame(plan,startState){
       if(isReachabilityGoal(node.state,plan)){ found=node; break; }
       if(depth===MAX_DEPTH) continue;
 
-      for(const action of simLegalActions(node.state)){
+      for(const action of generateLegalActions(node.state)){
         const penalty=reachabilityActionPenalty(action,reserved);
         if(penalty>=7000){ resourceViolationPrunes++; continue; }
 
-        const n=simClone(node.state);
-        if(!simApply(n,action)) continue;
+        const n=simApplyAction(node.state,action);
+        if(!n) continue;
         const child={state:n,path:[...node.path,action]};
         child.rank=reachabilityRank(child,plan)-penalty;
         if(child.rank>bestRank){ best=child; bestRank=child.rank; }
@@ -1052,20 +1053,29 @@ function analyzeEndgamePlans(s){
     beams=next.slice(0,ENDGAME_BEAM_WIDTH);
   }
 
-  const expanded=beams.map(p=>{
+  const preExpanded=beams.map(p=>{
     const validation=validateEndgameSequence(p,s);
     const inventoryTarget=buildInventoryTargetFromEndgame(p,s);
     const tile1Job=p.jobs.find(j=>j.target===1)||null;
-    const reachability=validation.executable ? searchReachableEndgame(p,s) : {reachable:false,statesExamined:0,resourceViolationPrunes:0,pathLength:null};
-    const laneValidation=validateLITPLanes(p,s,reachability);
     const litpBonus=inventoryTarget.litp.determined?140:0;
-    const sequenceScore=p.score
+    const preliminaryScore=p.score
       + validation.feasibilityScore*22
       + (validation.simulationPassed?900:-1400)
-      + (reachability.reachable?1600:-1800)
-      + (laneValidation.valid?450:-500)
       + litpBonus
       - validation.holdBurden*90;
+    return {p,validation,inventoryTarget,tile1Job,preliminaryScore};
+  }).sort((a,b)=>b.preliminaryScore-a.preliminaryScore);
+
+  const expanded=preExpanded.map((x,index)=>{
+    const {p,validation,inventoryTarget,tile1Job,preliminaryScore}=x;
+    const shouldTest=validation.executable && index<ENDGAME_REACHABILITY_TEST_LIMIT;
+    const reachability=shouldTest
+      ? searchReachableEndgame(p,s)
+      : {reachable:false,skipped:validation.executable,statesExamined:0,resourceViolationPrunes:0,pathLength:null};
+    const laneValidation=validateLITPLanes(p,s,reachability);
+    const sequenceScore=preliminaryScore
+      + (reachability.reachable?1600:(reachability.skipped?-400:-1800))
+      + (laneValidation.valid?450:-500);
     return {p,validation,inventoryTarget,tile1Job,reachability,laneValidation,sequenceScore};
   }).sort((a,b)=>b.sequenceScore-a.sequenceScore);
 
@@ -1104,7 +1114,8 @@ function analyzeEndgamePlans(s){
     topCandidateHardConflicts:best?.validation?.hardConflicts??null,
     topCandidateUnresolvedJobs:best?.validation?.unresolvedJobs??null,
     rejectedBySequenceSimulation:expanded.filter(x=>!x.validation.simulationPassed).length,
-    rejectedByReachability:expanded.filter(x=>x.validation.simulationPassed && !x.reachability.reachable).length,
+    rejectedByReachability:expanded.filter(x=>x.validation.simulationPassed && !x.reachability.reachable && !x.reachability.skipped).length,
+    reachabilityTestsSkipped:expanded.filter(x=>x.reachability.skipped).length,
     rejectedByLaneValidation:expanded.filter(x=>x.validation.simulationPassed && x.reachability.reachable && !x.laneValidation.valid).length,
     reachableCandidates:expanded.filter(x=>x.reachability.reachable).length,
     topCandidateReachable:best?.reachability?.reachable??false,
@@ -1128,7 +1139,7 @@ function analyzeEndgamePlans(s){
 
   return {
     mode:'DIAGNOSTIC_ONLY',
-    plannerVersion:'v0.7-endgame-reachability',
+    plannerVersion:'v0.7.1-endgame-reachability-fix',
     coreTargets:[...ENDGAME_CORE_TARGETS],
     explanation:'Uses the complement map exhaustively, simulates each proposed endgame, then searches from the real starting puzzle for a path that reaches that endgame corridor while preserving its required resources. LITP and pre/post lanes are validated only on reachable candidates. The full-plan search is still not forced to follow the result.',
     progressMetrics,
@@ -1167,7 +1178,7 @@ function renderEndgameAnalysis(a){
   const lanes=best.inventoryTarget.lanes.available
     ? `LITP lanes: pre ${best.inventoryTarget.lanes.preLaneLabel}; post ${best.inventoryTarget.lanes.postLaneLabel}`
     : 'LITP lanes unavailable.';
-  const metrics=`Progress: complement options ${m.totalComplementOptions}; sequence rejects ${m.rejectedBySequenceSimulation}; reachability rejects ${m.rejectedByReachability}; lane rejects ${m.rejectedByLaneValidation}; fully viable ${m.executableCandidates}; core coverage ${m.coreCoveragePercent}%.`;
+  const metrics=`Progress: complement options ${m.totalComplementOptions}; sequence rejects ${m.rejectedBySequenceSimulation}; reachability rejects ${m.rejectedByReachability}; reachability skipped ${m.reachabilityTestsSkipped}; lane rejects ${m.rejectedByLaneValidation}; fully viable ${m.executableCandidates}; core coverage ${m.coreCoveragePercent}%.`;
   body.textContent=`Top reasoned endgame (earlier → later):\n${lines.join('\n')}\n${protect}\n${holds}\n${lanes}\n${metrics}`;
 }
 
