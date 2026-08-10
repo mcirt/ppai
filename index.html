@@ -5,47 +5,115 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Puzzle Pyramid AI Input</title>
 <style>
-:root{--tile-width:40px;--tile-height:60px;--tile-overlap:-30px;--tile-bg:#f5f2d8}
-*{box-sizing:border-box}body{margin:0;padding:16px 8px 28px;font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111;text-align:center}h1{margin:0 0 6px;font-size:clamp(26px,7vw,42px)}.version{margin-bottom:16px;color:#666}#pyramid{width:max-content;max-width:100%;margin:0 auto;padding-top:30px}.pyramid-row{display:flex;justify-content:center;margin:var(--tile-overlap) 0 0}.tile{position:relative;width:var(--tile-width);height:var(--tile-height);flex:0 0 var(--tile-width);background:var(--tile-bg);border-radius:10px;box-shadow:2px 2px 5px rgba(0,0,0,.3);background-repeat:no-repeat;background-position:center 7px;background-size:30px 30px}.inventory-wrap{width:100%;overflow-x:auto;margin-top:20px;padding-bottom:4px}.inventory{display:flex;justify-content:center;min-width:calc(24 * var(--tile-width));width:max-content;margin:0 auto}.inventory .tile:nth-child(3n){border-right:2px solid #111}.section-label{margin:18px 0 8px;font-size:18px;font-weight:700}.emoji-keyboard{display:grid;grid-template-columns:repeat(6,54px);gap:7px;justify-content:center}.emoji-key{width:54px;height:54px;border:0;border-radius:9px;background:#f5f2d8 center/38px 38px no-repeat;box-shadow:1px 2px 5px rgba(0,0,0,.28);cursor:pointer;touch-action:manipulation}.emoji-key:active,.emoji-key.active{transform:translateY(1px);outline:3px solid #2f80ed}.status{min-height:24px;margin:12px 0 0;color:#444;font-size:15px}.button-grid{display:grid;grid-template-columns:repeat(2,minmax(140px,180px));gap:10px;justify-content:center;margin-top:14px}.action-button{border:0;border-radius:7px;padding:11px 12px;color:#fff;background:#666;font-size:16px;font-weight:700;cursor:pointer}#playButton{background:#228b22}#solveButton{background:#1677b8}#clearButton{background:#aa2b2b}@media(max-width:470px){.emoji-keyboard{grid-template-columns:repeat(6,44px);gap:5px}.emoji-key{width:44px;height:48px;background-size:32px 32px}.button-grid{grid-template-columns:repeat(2,minmax(130px,1fr));padding:0 8px}}
+:root{--tile-width:40px;--tile-height:60px;--tile-overlap:-30px;--tile-bg:#f5f2d8;--accent:#2f80ed}
+*{box-sizing:border-box}body{margin:0;padding:16px 8px 28px;font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111;text-align:center}h1{margin:0 0 6px;font-size:clamp(26px,7vw,42px)}.version{margin-bottom:8px;color:#666}.file-status{min-height:22px;color:#444;font-size:13px;margin-bottom:8px}#pyramid{width:max-content;max-width:100%;margin:0 auto;padding-top:30px}.pyramid-row{display:flex;justify-content:center;margin:var(--tile-overlap) 0 0}.tile{position:relative;width:var(--tile-width);height:var(--tile-height);flex:0 0 var(--tile-width);background:var(--tile-bg);border-radius:10px;box-shadow:2px 2px 5px rgba(0,0,0,.3);background-repeat:no-repeat;background-position:center 7px;background-size:30px 30px;cursor:pointer;outline:3px solid transparent;outline-offset:-2px}.tile.selected{outline-color:var(--accent)}.inventory-wrap{width:100%;overflow-x:auto;margin-top:20px;padding-bottom:4px}.inventory{display:flex;justify-content:center;min-width:calc(24 * var(--tile-width));width:max-content;margin:0 auto}.inventory .tile:nth-child(3n){border-right:2px solid #111}.section-label{margin:18px 0 8px;font-size:18px;font-weight:700}.emoji-keyboard{display:grid;grid-template-columns:repeat(6,54px);gap:7px;justify-content:center}.emoji-key{width:54px;height:54px;border:0;border-radius:9px;background:#f5f2d8 center/38px 38px no-repeat;box-shadow:1px 2px 5px rgba(0,0,0,.28);cursor:pointer;touch-action:manipulation}.emoji-key:active,.emoji-key.active{transform:translateY(1px);outline:3px solid var(--accent)}.status{min-height:24px;margin:12px 0 0;color:#444;font-size:15px}.button-grid{display:grid;grid-template-columns:repeat(2,minmax(140px,180px));gap:10px;justify-content:center;margin-top:14px}.action-button{border:0;border-radius:7px;padding:11px 12px;color:#fff;background:#666;font-size:16px;font-weight:700;cursor:pointer}#playButton{background:#228b22}#solveButton{background:#1677b8}#clearButton{background:#aa2b2b}.panel{max-width:760px;margin:18px auto 0;border:1px solid #ccc;border-radius:10px;padding:12px;background:#fafafa;text-align:left}.panel h2{font-size:18px;margin:0 0 8px}.mode-row{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;margin:8px 0}.mode-btn{border:1px solid #aaa;background:#fff;border-radius:7px;padding:8px 12px;font-weight:700;cursor:pointer}.mode-btn.active{background:#1677b8;color:#fff;border-color:#1677b8}.hint-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.hint{display:flex;align-items:center;gap:5px;border:1px solid #ddd;border-radius:7px;padding:6px;background:#fff}.hint.armed{outline:2px solid var(--accent)}.hint input{width:48px;text-align:center}.hint button{margin-left:auto}.hint-note,.memory-note{font-size:12px;color:#555;margin-top:7px}.memory-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.memory-row button,.memory-row select{padding:8px 10px;border-radius:7px;border:1px solid #aaa;background:#fff;font-weight:700}.memory-count{text-align:center;margin-top:8px;font-size:13px}.demo-list{font-size:12px;max-height:140px;overflow:auto;margin-top:8px}.demo-item{border-top:1px solid #ddd;padding:6px 0}.hidden{display:none!important}@media(max-width:470px){.emoji-keyboard{grid-template-columns:repeat(6,44px);gap:5px}.emoji-key{width:44px;height:48px;background-size:32px 32px}.button-grid{grid-template-columns:repeat(2,minmax(130px,1fr));padding:0 8px}.hint-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">JavaScript Solver v0.1 — mechanical conversion from Pyramid Solitaire v1.5.5</div>
+<div class="version">PPAI JS v0.8 — Teacher + Demo Memory Infrastructure</div>
+<div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
 <div class="section-label">Emoji Keyboard</div>
 <div class="emoji-keyboard" id="emojiKeyboard"></div>
 <div id="status" class="status">Next input: Tile 1 of 52</div>
+
+<div class="panel">
+  <h2>Endgame Teacher Mode</h2>
+  <div class="mode-row">
+    <button class="mode-btn" data-mode="AUTO">AUTO</button>
+    <button class="mode-btn" data-mode="GUIDED">GUIDED</button>
+    <button class="mode-btn" data-mode="COMPARE">COMPARE</button>
+  </div>
+  <div id="hintArea" class="hint-grid">
+    <div class="hint" data-hkey="t1"><span>T1</span><input id="hint_t1" readonly placeholder="—"><button>Set</button></div>
+    <div class="hint" data-hkey="t2"><span>T2</span><input id="hint_t2" readonly placeholder="—"><button>Set</button></div>
+    <div class="hint" data-hkey="t3"><span>T3</span><input id="hint_t3" readonly placeholder="—"><button>Set</button></div>
+    <div class="hint" data-hkey="t4"><span>T4</span><input id="hint_t4" readonly placeholder="—"><button>Set</button></div>
+    <div class="hint" data-hkey="t5"><span>T5</span><input id="hint_t5" readonly placeholder="—"><button>Set</button></div>
+    <div class="hint" data-hkey="t6"><span>T6</span><input id="hint_t6" readonly placeholder="—"><button>Set</button></div>
+    <div class="hint" data-hkey="litp"><span>LITP</span><input id="hint_litp" readonly placeholder="—"><button>Set</button></div>
+  </div>
+  <div class="hint-note">AUTO ignores hints. GUIDED uses supplied hints as constraints. COMPARE hides them from the solver until after its independent deduction, then compares the answers.</div>
+</div>
+
+<div class="panel">
+  <h2>PPAI Demo Memory</h2>
+  <div class="memory-row">
+    <button id="uploadDemoButton">Upload Human Demo</button>
+    <button id="exportDemoButton">Export Demo Library</button>
+    <button id="importDemoButton">Import Demo Library</button>
+    <select id="memoryUseMode" title="How solver may use saved demonstrations">
+      <option value="INDEPENDENT">Solve Independently</option>
+      <option value="INFORMED">Demo-Informed</option>
+      <option value="REPLAY">Use Known Demo if Available</option>
+    </select>
+  </div>
+  <div id="memoryCount" class="memory-count">0 saved demonstrations</div>
+  <div id="demoList" class="demo-list"></div>
+  <div class="memory-note">Working memory is stored in this browser. Export the library JSON to keep a permanent copy in GitHub or move it to another device.</div>
+</div>
+
 <div class="button-grid">
 <button id="deleteButton" class="action-button">Delete Last Input</button><button id="clearButton" class="action-button">Clear Board</button>
 <button id="playButton" class="action-button">Play Puzzle</button><button id="solveButton" class="action-button">Solve Puzzle</button>
 <button id="saveButton" class="action-button">Save Puzzle</button><button id="uploadButton" class="action-button">Upload Puzzle</button>
 </div>
 <input type="file" id="fileInput" hidden accept=".json,application/json">
+<input type="file" id="demoFileInput" hidden accept=".json,application/json">
+<input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.1'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.8'; const TOTAL_TILES=52;
+const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
-let currentTile=1; let tileData={}; const statusElement=document.getElementById('status');
+let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
+let solverMode=localStorage.getItem('ppaiSolverMode')||'AUTO';
+let hints=JSON.parse(localStorage.getItem('solverHints')||'{"t1":null,"t2":null,"t3":null,"t4":null,"t5":null,"t6":null,"litp":null}');
+let activeHintKey=null;
+const statusElement=document.getElementById('status');
 function emojiPath(key){return key?`images/${key}.png`:''}
-function makeBoard(){let id=1;const root=document.getElementById('pyramid');for(let row=1;row<=7;row++){const r=document.createElement('div');r.className='pyramid-row';for(let c=0;c<row;c++){const t=document.createElement('div');t.className='tile';t.id=`tile${id++}`;r.appendChild(t)}root.appendChild(r)}const inv=document.getElementById('inventory');for(let i=29;i<=52;i++){const t=document.createElement('div');t.className='tile';t.id=`tile${i}`;inv.appendChild(t)}}
-function makeKeyboard(){const k=document.getElementById('emojiKeyboard');for(let i=1;i<=18;i++){const key=`emoji${i}`;const b=document.createElement('button');b.className='emoji-key';b.dataset.emoji=key;b.title=key;b.style.backgroundImage=`url('${emojiPath(key)}')`;b.addEventListener('click',()=>enterEmoji(key,b));k.appendChild(b)}}
 function normalizeEmoji(v){const x=String(v??'').trim().toLowerCase();return VALID_EMOJIS.has(x)?x:null}
 function setTileValue(id,key){const el=document.getElementById(`tile${id}`);if(el)el.style.backgroundImage=key?`url('${emojiPath(key)}')`:''}
 function updateStatus(message=''){if(message){statusElement.textContent=message;return}statusElement.textContent=currentTile<=TOTAL_TILES?`Next input: Tile ${currentTile} of ${TOTAL_TILES}`:'Board complete: all 52 tiles are filled.'}
+function clearTileSelection(){document.querySelectorAll('.tile.selected').forEach(x=>x.classList.remove('selected'));selectedTileId=null}
+function selectTile(id){clearTileSelection();selectedTileId=id;document.getElementById(`tile${id}`)?.classList.add('selected');updateStatus(`Tile ${id} selected for editing.`)}
+function makeBoard(){let id=1;const root=document.getElementById('pyramid');for(let row=1;row<=7;row++){const r=document.createElement('div');r.className='pyramid-row';for(let c=0;c<row;c++){const t=document.createElement('div');t.className='tile';t.id=`tile${id}`;t.dataset.tileId=String(id);t.addEventListener('click',()=>handleBoardTileClick(Number(t.dataset.tileId)));r.appendChild(t);id++}root.appendChild(r)}const inv=document.getElementById('inventory');for(let i=29;i<=52;i++){const t=document.createElement('div');t.className='tile';t.id=`tile${i}`;t.dataset.tileId=String(i);t.addEventListener('click',()=>handleBoardTileClick(i));inv.appendChild(t)}}
+function handleBoardTileClick(id){if(activeHintKey){setHint(activeHintKey,id);armHint(null);return}selectTile(id)}
+function makeKeyboard(){const k=document.getElementById('emojiKeyboard');for(let i=1;i<=18;i++){const key=`emoji${i}`;const b=document.createElement('button');b.className='emoji-key';b.dataset.emoji=key;b.title=key;b.style.backgroundImage=`url('${emojiPath(key)}')`;b.addEventListener('click',()=>enterEmoji(key,b));k.appendChild(b)}}
 function recalc(){currentTile=1;while(currentTile<=52&&normalizeEmoji(tileData[currentTile]))currentTile++;updateStatus()}
-function enterEmoji(key,button){if(currentTile>52){updateStatus('All 52 tiles are already filled.');return}tileData[currentTile]=key;setTileValue(currentTile,key);currentTile++;updateStatus();document.querySelectorAll('.emoji-key.active').forEach(x=>x.classList.remove('active'));button.classList.add('active');setTimeout(()=>button.classList.remove('active'),140)}
+function enterEmoji(key,button){if(selectedTileId!==null){const id=selectedTileId;tileData[id]=key;setTileValue(id,key);clearTileSelection();recalc();updateStatus(`Tile ${id} updated to ${key}.`)}else{if(currentTile>52){updateStatus('All 52 tiles are filled. Tap a tile to edit it.');return}tileData[currentTile]=key;setTileValue(currentTile,key);currentTile++;updateStatus()}document.querySelectorAll('.emoji-key.active').forEach(x=>x.classList.remove('active'));button.classList.add('active');setTimeout(()=>button.classList.remove('active'),140)}
 function boardHasData(){return Object.values(tileData).some(normalizeEmoji)}
-function openDestination(fileName,windowName){if(!boardHasData()){updateStatus('Enter at least one emoji first.');return}localStorage.setItem('tileData',JSON.stringify(tileData));localStorage.setItem('ppaiVersion',VERSION);const w=window.open(fileName,windowName);if(!w)location.href=fileName}
-document.getElementById('deleteButton').addEventListener('click',()=>{if(currentTile===1){updateStatus('Nothing to delete.');return}if(currentTile>52)currentTile=53;currentTile--;delete tileData[currentTile];setTileValue(currentTile,null);updateStatus()});
-document.getElementById('clearButton').addEventListener('click',()=>{tileData={};currentTile=1;for(let i=1;i<=52;i++)setTileValue(i,null);updateStatus('Board cleared. Next input: Tile 1 of 52')});
+function openDestination(fileName,windowName){if(!boardHasData()){updateStatus('Enter at least one emoji first.');return}localStorage.setItem('tileData',JSON.stringify(tileData));localStorage.setItem('ppaiVersion',VERSION);localStorage.setItem('sourceFilename',currentFilename||'');localStorage.setItem('solverHints',JSON.stringify(hints));localStorage.setItem('ppaiSolverMode',solverMode);localStorage.setItem('ppaiMemoryUseMode',document.getElementById('memoryUseMode').value);const w=window.open(fileName,windowName);if(!w)location.href=fileName}
+function setFileStatus(){document.getElementById('fileStatus').textContent=currentFilename?`Loaded: ${currentFilename}`:'No file loaded'}
+function setMode(mode){solverMode=mode;localStorage.setItem('ppaiSolverMode',mode);document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));document.getElementById('hintArea').style.opacity=mode==='AUTO'?'.45':'1'}
+document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+function armHint(key){activeHintKey=(activeHintKey===key)?null:key;document.querySelectorAll('.hint').forEach(h=>h.classList.toggle('armed',!!activeHintKey&&h.dataset.hkey===activeHintKey));if(activeHintKey)updateStatus(`Hint ${activeHintKey.toUpperCase()} armed — tap any tile 1–52.`)}
+function setHint(key,id){hints[key]=id;localStorage.setItem('solverHints',JSON.stringify(hints));refreshHints()}
+function clearHint(key){hints[key]=null;localStorage.setItem('solverHints',JSON.stringify(hints));refreshHints()}
+function refreshHints(){for(const key of ['t1','t2','t3','t4','t5','t6','litp']){const input=document.getElementById(`hint_${key}`),box=document.querySelector(`.hint[data-hkey="${key}"]`),btn=box?.querySelector('button');if(input)input.value=hints[key]??'';if(btn)btn.textContent=hints[key]?'Clear':'Set'}}
+document.querySelectorAll('.hint button').forEach(btn=>btn.addEventListener('click',e=>{const key=e.target.closest('.hint').dataset.hkey;if(hints[key]){clearHint(key);armHint(null)}else armHint(key)}));
+function canonicalPuzzleSignature(data){let s='';for(let i=1;i<=52;i++)s+=`${i}:${normalizeEmoji(data?.[i]??data?.[String(i)])||'-'}|`;let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return `ppai-${(h>>>0).toString(16).padStart(8,'0')}`}
+function getDemoLibrary(){try{return JSON.parse(localStorage.getItem(DEMO_LIBRARY_KEY)||'[]')}catch(_){return []}}
+function saveDemoLibrary(lib){localStorage.setItem(DEMO_LIBRARY_KEY,JSON.stringify(lib));renderDemoLibrary()}
+function extractDemoInfo(raw,fileName=''){const events=raw?.events||raw?.demo?.events||raw?.canonicalDemo?.events||[];const init=events.find(e=>e.action==='Game Initialized')?.details?.initialTileData||raw?.puzzle?.initialTileData||raw?.initialTileData||raw?.initialState?.tileData;const finalScore=events.find(e=>e.action==='ACT'&&e.details?.type==='FINAL_SCORE')?.details?.finalScore ?? raw?.result?.finalScore ?? raw?.finalState?.score ?? null;const moves=events.filter(e=>e.action==='ACT'&&e.details?.type!=='FINAL_SCORE').map(e=>e.details);if(!init && raw?.finalState?.logs){return {error:'This log has no initial puzzle snapshot. Use the v0.8 HUMAN log or an older ACT_DEMO file.'}}if(!init)return {error:'No initial puzzle configuration found.'};const clean={};for(let i=1;i<=52;i++){const v=normalizeEmoji(init[i]??init[String(i)]);if(v)clean[i]=v}if(Object.keys(clean).length<52)return {error:'Initial puzzle snapshot is incomplete.'};return {signature:canonicalPuzzleSignature(clean),initialTileData:clean,finalScore,moves,fileName}}
+function addDemoRaw(raw,fileName=''){const info=extractDemoInfo(raw,fileName);if(info.error){updateStatus(info.error);return false}const lib=getDemoLibrary();const id=`${info.signature}-${Date.now()}`;lib.push({id,signature:info.signature,sourceFilename:fileName||raw?.meta?.source_filename||'',addedAt:new Date().toISOString(),finalScore:info.finalScore,moves:info.moves,initialTileData:info.initialTileData,raw});saveDemoLibrary(lib);updateStatus(`Human demo added: ${info.finalScore??'score unknown'} points.`);return true}
+function renderDemoLibrary(){const lib=getDemoLibrary();document.getElementById('memoryCount').textContent=`${lib.length} saved demonstration${lib.length===1?'':'s'}`;const box=document.getElementById('demoList');box.innerHTML='';lib.slice().reverse().slice(0,20).forEach(d=>{const x=document.createElement('div');x.className='demo-item';x.textContent=`${d.sourceFilename||d.signature} — score ${d.finalScore??'?'}`;box.appendChild(x)})}
+document.getElementById('uploadDemoButton').onclick=()=>document.getElementById('demoFileInput').click();
+document.getElementById('demoFileInput').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{addDemoRaw(JSON.parse(r.result),f.name)}catch(err){console.error(err);updateStatus('Could not read that demo JSON.')}finally{e.target.value=''}};r.readAsText(f)});
+document.getElementById('exportDemoButton').onclick=()=>{const payload={schemaVersion:1,exportedAt:new Date().toISOString(),demos:getDemoLibrary()};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ppai_demo_library_${Date.now()}.json`;a.click();URL.revokeObjectURL(a.href)};
+document.getElementById('importDemoButton').onclick=()=>document.getElementById('demoLibraryInput').click();
+document.getElementById('demoLibraryInput').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result);const incoming=Array.isArray(p)?p:p.demos;if(!Array.isArray(incoming))throw new Error('No demos array');const map=new Map(getDemoLibrary().map(d=>[d.id,d]));incoming.forEach(d=>map.set(d.id||`${d.signature}-${Math.random()}`,d));saveDemoLibrary([...map.values()]);updateStatus(`Imported ${incoming.length} demo records.`)}catch(err){console.error(err);updateStatus('Could not import that demo library.')}finally{e.target.value=''}};r.readAsText(f)});
+
+document.getElementById('deleteButton').addEventListener('click',()=>{if(selectedTileId!==null){const id=selectedTileId;delete tileData[id];setTileValue(id,null);clearTileSelection();recalc();updateStatus(`Tile ${id} cleared.`);return}if(currentTile===1){updateStatus('Nothing to delete.');return}if(currentTile>52)currentTile=53;currentTile--;delete tileData[currentTile];setTileValue(currentTile,null);updateStatus()});
+document.getElementById('clearButton').addEventListener('click',()=>{tileData={};currentTile=1;currentFilename='';for(let i=1;i<=52;i++)setTileValue(i,null);clearTileSelection();setFileStatus();updateStatus('Board cleared. Next input: Tile 1 of 52')});
 document.getElementById('playButton').addEventListener('click',()=>openDestination('game.html','Puzzle Pyramid Game'));
 document.getElementById('solveButton').addEventListener('click',()=>openDestination('solver.html','Puzzle Pyramid Solver'));
 function ts(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`}
-document.getElementById('saveButton').addEventListener('click',()=>{if(!boardHasData()){updateStatus('There is no board data to save.');return}const payload={version:VERSION,saveType:'PUZZLE',savedAt:new Date().toISOString(),tileData};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`puzzle_pyramid_${ts()}.json`;a.click();URL.revokeObjectURL(a.href);updateStatus('Puzzle saved.')});
+document.getElementById('saveButton').addEventListener('click',()=>{if(!boardHasData()){updateStatus('There is no board data to save.');return}const payload={version:VERSION,saveType:'PUZZLE',savedAt:new Date().toISOString(),tileData,hints,solverMode,meta:{source_filename:currentFilename||null,puzzleSignature:canonicalPuzzleSignature(tileData)}};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=currentFilename||`puzzle_pyramid_${ts()}.json`;a.click();URL.revokeObjectURL(a.href);updateStatus('Puzzle saved.')});
 document.getElementById('uploadButton').addEventListener('click',()=>document.getElementById('fileInput').click());
-document.getElementById('fileInput').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result),src=p?.tileData||p,clean={};for(let i=1;i<=52;i++){const v=normalizeEmoji(src?.[i]);if(v)clean[i]=v}tileData=clean;for(let i=1;i<=52;i++)setTileValue(i,tileData[i]||null);recalc();updateStatus(`Puzzle loaded. ${statusElement.textContent}`)}catch(err){console.error(err);updateStatus('Could not load that JSON file.')}finally{e.target.value=''}};r.readAsText(f)});
-makeBoard();makeKeyboard();updateStatus();
+document.getElementById('fileInput').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result),src=p?.tileData||p,clean={};for(let i=1;i<=52;i++){const v=normalizeEmoji(src?.[i]);if(v)clean[i]=v}tileData=clean;for(let i=1;i<=52;i++)setTileValue(i,tileData[i]||null);if(p?.hints){hints={...hints,...p.hints};if(hints.lit&&!hints.litp)hints.litp=hints.lit;refreshHints()}if(p?.solverMode)setMode(p.solverMode);currentFilename=f.name;localStorage.setItem('sourceFilename',currentFilename);setFileStatus();recalc();updateStatus(`Puzzle loaded. ${statusElement.textContent}`)}catch(err){console.error(err);updateStatus('Could not load that JSON file.')}finally{e.target.value=''}};r.readAsText(f)});
+makeBoard();makeKeyboard();setMode(solverMode);refreshHints();renderDemoLibrary();setFileStatus();document.getElementById('memoryUseMode').value=localStorage.getItem('ppaiMemoryUseMode')||'INDEPENDENT';document.getElementById('memoryUseMode').addEventListener('change',e=>localStorage.setItem('ppaiMemoryUseMode',e.target.value));updateStatus();
 </script>
 </body></html>

@@ -56,7 +56,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">Puzzle Pyramid AI JS v0.1</div>
+<div class="version">Puzzle Pyramid AI JS v0.8 — Canonical Human Logger</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -71,7 +71,8 @@ h1 { text-align:center; margin:0 0 4px; }
   <div class="holdtile" id="tileh" data-zone="hold"><span class="emoji-face"></span><div class="holdtext">Hold</div></div>
 </div>
 <div class="download-row">
-  <button id="download-button">Download Game Log</button>
+  <button id="download-button">Download Human Log</button>
+  <button id="add-demo-button">Add Demo to PPAI</button>
 </div>
 <div id="status" class="status">Click two tiles, or drag one playable tile onto another.</div>
 <div class="log-panel">
@@ -80,7 +81,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.1';
+const VERSION='Puzzle Pyramid AI JS v0.8';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -106,6 +107,11 @@ let state={ tileData:{}, stockQueue:[], inPlay:[], hold:null, score:0, streak:0,
 let history=[];
 let selected=null;
 let pointerSession=null;
+let initialTileData={};
+let gameStartedAt=Date.now();
+let lastDecisionAt=gameStartedAt;
+const sourceFilename=localStorage.getItem('sourceFilename')||'';
+const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 
 function makePyramid(){
   const root=document.getElementById('pyramid'); let id=1;
@@ -123,6 +129,7 @@ function loadInitialState(){
   if(!raw){ setStatus('No board data found. Return to index.html and load a puzzle.'); return; }
   const data=JSON.parse(raw); state.tileData={}; for(let i=1;i<=52;i++) state.tileData[i]=data[i]??data[String(i)]??null;
   state.stockQueue=[]; for(let i=29;i<=52;i++) if(state.tileData[i]) state.stockQueue.push(i);
+  initialTileData=JSON.parse(JSON.stringify(state.tileData)); gameStartedAt=Date.now(); lastDecisionAt=gameStartedAt;
   renderAll(); bindPointerEvents();
 }
 function cloneState(){ return JSON.parse(JSON.stringify(state)); }
@@ -160,7 +167,10 @@ function describe(ref){
 }
 function commitLog(type,summary,details={}){
   state.moveNumber++;
-  const entry={move:state.moveNumber,type,summary,score:state.score,streak:state.streak,timestamp:new Date().toISOString(),details};
+  const now=Date.now();
+  const decisionTimeMs=Math.max(0,now-lastDecisionAt);
+  lastDecisionAt=now;
+  const entry={move:state.moveNumber,type,summary,score:state.score,streak:state.streak,timestamp:new Date(now).toISOString(),decisionTimeMs,details};
   state.logs.push(entry); renderLog();
 }
 function inventoryUsedCount(s=state){ let n=0; for(let i=29;i<=52;i++) if(s.tileData[i]===null)n++; return n; }
@@ -188,7 +198,7 @@ async function clearUnmatched(ref){
   setStatus(`${describe(ref)} clearing…`);
   await animateUnmatchedBurst(ref);
   if(!isPlayable(ref)||!UNMATCHED.has(emojiOf(ref))) return false;
-  saveSnapshot(); const label=describe(ref); removeRef(ref); const pts=awardScoringAction(); commitLog('CLEAR',`Removed ${label}; +${pts} points.`); finishAction(ref); return true;
+  saveSnapshot(); const id=Number(ref.tileId), zone=ref.zone, emoji=emojiOf(ref), label=describe(ref); removeRef(ref); const pts=awardScoringAction(); commitLog('CLEAR',`Removed ${label}; +${pts} points.`,{tileId:id,zone,emoji,pointsAwarded:pts}); finishAction(ref); return true;
 }
 function matchRefs(a,b){
   if(!isPlayable(a)||!isPlayable(b)){ setStatus('Both tiles must be legally playable.'); return false; }
@@ -198,9 +208,11 @@ function matchRefs(a,b){
   const holdRef=a.zone==='hold'?a:(b.zone==='hold'?b:null);
   const otherRef=holdRef?(a.zone==='hold'?b:a):null;
   const heldSourceId=holdRef?state.hold?.sourceId:null;
+  const simSafeHeldEmoji=holdRef?state.hold?.emoji:null;
+  const emojiBeforeA=emojiOf(a), emojiBeforeB=emojiOf(b), emojiBeforeOther=otherRef?emojiOf(otherRef):null;
   removeRef(a); removeRef(b); const pts=awardScoringAction();
-  if(holdRef) commitLog('MATCH_HOLD',`Matched ${da} with ${db}; +${pts} points.`,{h:Number(heldSourceId),o:Number(otherRef.tileId)});
-  else commitLog('MATCH',`Matched ${da} with ${db}; +${pts} points.`,{a:Number(a.tileId),b:Number(b.tileId)});
+  if(holdRef) commitLog('MATCH_HOLD',`Matched ${da} with ${db}; +${pts} points.`,{holdTileId:Number(heldSourceId),otherTileId:Number(otherRef.tileId),otherZone:otherRef.zone,holdEmoji:holdRef?simSafeHeldEmoji:null,otherEmoji:emojiBeforeOther,pointsAwarded:pts,h:Number(heldSourceId),o:Number(otherRef.tileId)});
+  else commitLog('MATCH',`Matched ${da} with ${db}; +${pts} points.`,{a:Number(a.tileId),b:Number(b.tileId),aZone:a.zone,bZone:b.zone,aEmoji:emojiBeforeA,bEmoji:emojiBeforeB,pointsAwarded:pts});
   finishAction(a,b); return true;
 }
 function moveToHold(ref){
@@ -208,20 +220,20 @@ function moveToHold(ref){
   if(!isPlayable(ref)){ setStatus('Only a playable tile can be moved to Hold.'); return false; }
   if(UNMATCHED.has(emojiOf(ref))){ setStatus('Unmatched tiles clear automatically and cannot be moved to Hold.'); return false; }
   saveSnapshot(); const emoji=emojiOf(ref), source=describe(ref), sourceId=ref.tileId; removeRef(ref); state.hold={emoji,sourceId,sourceZone:ref.zone};
-  commitLog('HOLD',`Moved ${source} to Hold.`,{emoji});
+  commitLog('HOLD',`Moved ${source} to Hold.`,{tileId:Number(sourceId),fromZone:ref.zone,emoji});
   if(Number(sourceId)===1){ state.gameOver=true; applyCompletionBonuses('Tile 1 moved to Hold. Game complete'); }
   finishAction(ref); return true;
 }
 function draw(){
   if(state.gameOver) return;
   if(state.stockQueue.length===0){ resetStock(); return; }
-  saveSnapshot(); const drawn=state.stockQueue.splice(0,Math.min(3,state.stockQueue.length)); state.inPlay.push(...drawn); state.streak=0;
-  commitLog('DRAW',`Drew ${drawn.map(id=>`${id} (${state.tileData[id]})`).join(', ')}. Streak reset.`); finishAction();
+  saveSnapshot(); const streakBefore=state.streak; const drawn=state.stockQueue.splice(0,Math.min(3,state.stockQueue.length)); state.inPlay.push(...drawn); state.streak=0;
+  commitLog('DRAW',`Drew ${drawn.map(id=>`${id} (${state.tileData[id]})`).join(', ')}. Streak reset.`,{drawnTileIds:[...drawn],drawnEmojis:drawn.map(id=>state.tileData[id]),streakBefore,stockQueueAfter:[...state.stockQueue],inPlayAfter:[...state.inPlay]}); finishAction();
 }
 function resetStock(){
   if(!state.inPlay.length){ setStatus('No inventory tiles remain.'); return; }
-  saveSnapshot(); state.stockQueue=[...state.inPlay].sort((a,b)=>a-b); state.inPlay=[]; state.streak=0; const before=state.score; state.score=Math.max(0,state.score-50); const deduction=before-state.score;
-  if(deduction) flashPoints(`-${deduction}`,true); commitLog('RESET',`Reset inventory; -${deduction} points. Streak reset.`); finishAction();
+  saveSnapshot(); const survivorsBefore=[...state.inPlay].sort((a,b)=>a-b),streakBefore=state.streak,scoreBefore=state.score; state.stockQueue=[...survivorsBefore]; state.inPlay=[]; state.streak=0; const before=state.score; state.score=Math.max(0,state.score-50); const deduction=before-state.score;
+  if(deduction) flashPoints(`-${deduction}`,true); commitLog('RESET',`Reset inventory; -${deduction} points. Streak reset.`,{survivorTileIds:survivorsBefore,stockQueueAfter:[...state.stockQueue],scoreBefore,scoreAfter:state.score,streakBefore,deduction}); finishAction();
 }
 function finishAction(...refs){
   selected=null; clearHighlights();
@@ -329,14 +341,62 @@ function localTimestampForFilename(){
   const d=new Date(), pad=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
-function downloadLog(){
-  const payload={version:VERSION,playerType:'HUMAN',logType:'GAMEPLAY',savedAt:new Date().toISOString(),finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_game_log_HUMAN_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+function puzzleSignature(data){
+  let s=''; for(let i=1;i<=52;i++) s+=`${i}:${data?.[i]??data?.[String(i)]??'-'}|`;
+  let h=2166136261; for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}
+  return `ppai-${(h>>>0).toString(16).padStart(8,'0')}`;
 }
+function canonicalEvents(){
+  const events=[{action:'Game Initialized',details:{initialTileData:JSON.parse(JSON.stringify(initialTileData)),puzzleSignature:puzzleSignature(initialTileData)}}];
+  for(const e of state.logs){
+    if(e.type==='COMPLETE') continue;
+    const d=e.details||{};
+    let details={type:e.type};
+    if(e.type==='DRAW') details={...details,drawnTileIds:d.drawnTileIds||[]};
+    else if(e.type==='HOLD') details={...details,id:d.tileId,tileId:d.tileId,fromZone:d.fromZone,emoji:d.emoji};
+    else if(e.type==='MATCH') details={...details,a:d.a,b:d.b,aZone:d.aZone,bZone:d.bZone};
+    else if(e.type==='MATCH_HOLD') details={...details,h:d.h??d.holdTileId,o:d.o??d.otherTileId,holdTileId:d.holdTileId,otherTileId:d.otherTileId,otherZone:d.otherZone};
+    else if(e.type==='CLEAR') details={...details,id:d.tileId,tileId:d.tileId,zone:d.zone};
+    else if(e.type==='RESET') details={...details,survivorTileIds:d.survivorTileIds||[],stockQueueAfter:d.stockQueueAfter||[]};
+    events.push({action:'ACT',details});
+  }
+  events.push({action:'ACT',details:{type:'FINAL_SCORE',finalScore:state.score,finalDisplayedScore:state.score-(state.solveBonus||0)-(state.timeBonus||0),solveBonus:state.solveBonus||0,timeBonus:state.timeBonus||0,totalBonuses:(state.solveBonus||0)+(state.timeBonus||0),inventoryUsed:inventoryUsedCount(state),perfectScore:state.score===PERFECT_SCORE}});
+  return events;
+}
+function buildHumanPayload(){
+  return {
+    schemaVersion:2,
+    version:VERSION,
+    playerType:'HUMAN',
+    logType:'GAMEPLAY_AND_DEMO',
+    savedAt:new Date().toISOString(),
+    puzzle:{sourceFilename:sourceFilename||null,puzzleSignature:puzzleSignature(initialTileData),initialTileData:JSON.parse(JSON.stringify(initialTileData))},
+    moves:state.logs,
+    canonicalDemo:{events:canonicalEvents()},
+    result:{solved:!!state.gameOver,finalScore:state.score,solveBonus:state.solveBonus||0,timeBonus:state.timeBonus||0,perfectScore:state.score===PERFECT_SCORE,inventoryUsed:inventoryUsedCount(state),longestFinalStreak:state.streak,durationMs:Date.now()-gameStartedAt},
+    finalState:state,
+    historyDepth:history.length
+  };
+}
+function downloadLog(){
+  const payload=buildHumanPayload();
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_game_log_HUMAN_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+}
+function addDemoToPPAI(){
+  if(!state.gameOver){setStatus('Finish the puzzle before adding this run as a validated demo.');return}
+  const payload=buildHumanPayload();
+  const sig=payload.puzzle.puzzleSignature;
+  const record={id:`${sig}-${Date.now()}`,signature:sig,sourceFilename:sourceFilename||'',addedAt:new Date().toISOString(),finalScore:state.score,moves:payload.canonicalDemo.events.filter(e=>e.action==='ACT'&&e.details?.type!=='FINAL_SCORE').map(e=>e.details),initialTileData:payload.puzzle.initialTileData,raw:payload};
+  let lib=[]; try{lib=JSON.parse(localStorage.getItem(DEMO_LIBRARY_KEY)||'[]')}catch(_){lib=[]}
+  lib.push(record); localStorage.setItem(DEMO_LIBRARY_KEY,JSON.stringify(lib)); setStatus(`Demo added to PPAI memory: ${state.score.toLocaleString()} points.`);
+}
+
 
 makePyramid(); loadInitialState();
 document.getElementById('draw-button').addEventListener('click',draw);
 document.getElementById('undo-button').addEventListener('click',undo);
 document.getElementById('download-button').addEventListener('click',downloadLog);
+document.getElementById('add-demo-button').addEventListener('click',addDemoToPPAI);
 </script>
 </body>
 </html>
