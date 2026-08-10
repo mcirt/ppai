@@ -140,7 +140,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.6-endgame-sequence-sim';
+const VERSION='Puzzle Pyramid AI JS v0.7-endgame-reachability';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -351,7 +351,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'endgame-sequence-sim-diagnostic-v0.6',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'endgame-reachability-diagnostic-v0.7',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true},solverSessionStats,endgameAnalysis:solverEndgameAnalysis,planSearch:solverPlanResult,planPlayback:{plannedMoves:solverPlan.length,playedMoves:solverPlanIndex},finalState:state,historyDepth:history.length}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`puzzle_pyramid_solver_log_SOLVER_${localTimestampForFilename()}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 
@@ -852,6 +852,145 @@ function validateEndgameSequence(plan,s){
   };
 }
 
+
+function reservedResourcesForPlan(plan){
+  const pyramid=new Set(), inventory=new Set(), holdReservations=[];
+  for(const j of plan.jobs){
+    if(j.partner===null || j.partner===undefined) continue;
+    const p=Number(j.partner);
+    if(p>=29) inventory.add(p);
+    else {
+      pyramid.add(p);
+      if(j.kind==='MATCH_HELD_DESCENDANT') holdReservations.push({tileId:p,target:j.target});
+    }
+  }
+  for(const t of ENDGAME_CORE_TARGETS) pyramid.add(t);
+  return {pyramid,inventory,holdReservations};
+}
+
+function reachabilityActionPenalty(action,reserved){
+  let p=0;
+  const touches=[];
+  if(action?.a?.tileId!==undefined) touches.push(Number(action.a.tileId));
+  if(action?.b?.tileId!==undefined && action.b.tileId!=='h') touches.push(Number(action.b.tileId));
+  for(const id of touches){
+    if(reserved.inventory.has(id)) p+=9000;
+    if(reserved.pyramid.has(id) && id>6) p+=7000;
+  }
+  if(action?.type==='HOLD' && action?.a?.tileId!==undefined){
+    const id=Number(action.a.tileId);
+    if(reserved.pyramid.has(id)) p-=800;
+  }
+  return p;
+}
+
+function isReachabilityGoal(state,plan){
+  const reserved=reservedResourcesForPlan(plan);
+
+  for(let id=7;id<=28;id++){
+    if(!reserved.pyramid.has(id) && state.tileData[id]!==null) return false;
+  }
+  for(const id of reserved.inventory){
+    if(state.tileData[id]===null) return false;
+  }
+  for(const id of reserved.pyramid){
+    if(id<=6) continue;
+    const stillOnBoard=state.tileData[id]!==null;
+    const inHold=state.hold && Number(state.hold.sourceId)===id;
+    if(!stillOnBoard && !inHold) return false;
+  }
+  return true;
+}
+
+function reachabilityRank(node,plan){
+  const s=node.state;
+  const reserved=reservedResourcesForPlan(plan);
+  let clearedNonReserved=0;
+  for(let id=7;id<=28;id++){
+    if(!reserved.pyramid.has(id) && s.tileData[id]===null) clearedNonReserved++;
+  }
+
+  let preserved=0;
+  for(const id of reserved.inventory) if(s.tileData[id]!==null) preserved++;
+  for(const id of reserved.pyramid){
+    if(id<=6) continue;
+    if(s.tileData[id]!==null || (s.hold && Number(s.hold.sourceId)===id)) preserved++;
+  }
+
+  return clearedNonReserved*15000 + preserved*9000 + s.score*8 + s.streak*90
+    + immediateScoringCount(s)*300 - (s.resetsUsed||0)*600 - node.path.length*6;
+}
+
+function searchReachableEndgame(plan,startState){
+  const reserved=reservedResourcesForPlan(plan);
+  const start={state:simClone(startState),path:[]};
+  const MAX_DEPTH=46, BEAM=220, STATE_LIMIT=18000;
+
+  let frontier=[start], examined=0, found=null;
+  let best=start, bestRank=reachabilityRank(start,plan), resourceViolationPrunes=0;
+
+  for(let depth=0;depth<=MAX_DEPTH && frontier.length;depth++){
+    const next=[];
+    for(const node of frontier){
+      examined++;
+      if(examined>STATE_LIMIT) break;
+      if(isReachabilityGoal(node.state,plan)){ found=node; break; }
+      if(depth===MAX_DEPTH) continue;
+
+      for(const action of simLegalActions(node.state)){
+        const penalty=reachabilityActionPenalty(action,reserved);
+        if(penalty>=7000){ resourceViolationPrunes++; continue; }
+
+        const n=simClone(node.state);
+        if(!simApply(n,action)) continue;
+        const child={state:n,path:[...node.path,action]};
+        child.rank=reachabilityRank(child,plan)-penalty;
+        if(child.rank>bestRank){ best=child; bestRank=child.rank; }
+        next.push(child);
+      }
+    }
+    if(found || examined>STATE_LIMIT) break;
+    next.sort((a,b)=>b.rank-a.rank);
+    frontier=next.slice(0,BEAM);
+  }
+
+  return {
+    reachable:!!found,
+    statesExamined:examined,
+    maxDepth:MAX_DEPTH,
+    stateLimit:STATE_LIMIT,
+    resourceViolationPrunes,
+    pathLength:found?found.path.length:null,
+    bestProgressPathLength:best.path.length,
+    bestProgressRank:bestRank,
+    path:found?found.path:[],
+    bestProgressPath:best.path
+  };
+}
+
+function validateLITPLanes(plan,startState,reachability){
+  const target=buildInventoryTargetFromEndgame(plan,startState);
+  const litp=target.litp;
+  if(!litp?.determined) return {valid:false,reason:'No LITP determined for this endgame.'};
+
+  const order=target.lateInventoryJobs.map(x=>x.tileId);
+  const last=order[order.length-1]??null;
+  const correctLast=(last===litp.tileId);
+  const laneSet=new Set(target.lanes.postLane||[]);
+  const allLateJobsInsidePostLane=order.every(id=>laneSet.has(id));
+
+  return {
+    valid:correctLast && allLateJobsInsidePostLane,
+    litp:litp.tileId,
+    lateInventoryOrder:order,
+    correctLast,
+    allLateJobsInsidePostLane,
+    preLane:target.lanes.preLaneLabel,
+    postLane:target.lanes.postLaneLabel,
+    reachabilityConfirmed:!!reachability?.reachable
+  };
+}
+
 function buildInventoryTargetFromEndgame(plan,s){
   const execution=structuralExecutionForJobs(plan.jobs);
   const inventoryJobs=execution.filter(j=>j.kind==='MATCH_INVENTORY')
@@ -917,18 +1056,27 @@ function analyzeEndgamePlans(s){
     const validation=validateEndgameSequence(p,s);
     const inventoryTarget=buildInventoryTargetFromEndgame(p,s);
     const tile1Job=p.jobs.find(j=>j.target===1)||null;
+    const reachability=validation.executable ? searchReachableEndgame(p,s) : {reachable:false,statesExamined:0,resourceViolationPrunes:0,pathLength:null};
+    const laneValidation=validateLITPLanes(p,s,reachability);
     const litpBonus=inventoryTarget.litp.determined?140:0;
-    const sequenceScore=p.score+validation.feasibilityScore*22+(validation.simulationPassed?900:-1400)+litpBonus-validation.holdBurden*90;
-    return {p,validation,inventoryTarget,tile1Job,sequenceScore};
+    const sequenceScore=p.score
+      + validation.feasibilityScore*22
+      + (validation.simulationPassed?900:-1400)
+      + (reachability.reachable?1600:-1800)
+      + (laneValidation.valid?450:-500)
+      + litpBonus
+      - validation.holdBurden*90;
+    return {p,validation,inventoryTarget,tile1Job,reachability,laneValidation,sequenceScore};
   }).sort((a,b)=>b.sequenceScore-a.sequenceScore);
 
-  const accepted=expanded.filter(x=>x.validation.executable);
-  const rejected=expanded.filter(x=>!x.validation.executable);
+  const accepted=expanded.filter(x=>x.validation.executable && x.reachability.reachable && x.laneValidation.valid);
+  const rejected=expanded.filter(x=>!(x.validation.executable && x.reachability.reachable && x.laneValidation.valid));
 
   const candidates=accepted.slice(0,ENDGAME_KEEP_CANDIDATES).map((x,index)=>{
     const {p,validation,inventoryTarget,tile1Job,sequenceScore}=x;
     return {
       id:`EG-${index+1}`,rank:index+1,structuralScore:p.score,sequenceScore,validation,
+      reachability,laneValidation,
       tile1:{emoji:s.tileData[1],method:tile1Job?.kind||'UNRESOLVED',
         partner:tile1Job?.partner??null,partnerEmoji:tile1Job?.partner?s.tileData[tile1Job.partner]:null},
       jobs:p.jobs.map(j=>({target:j.target,targetEmoji:s.tileData[j.target],kind:j.kind,partner:j.partner,
@@ -956,6 +1104,13 @@ function analyzeEndgamePlans(s){
     topCandidateHardConflicts:best?.validation?.hardConflicts??null,
     topCandidateUnresolvedJobs:best?.validation?.unresolvedJobs??null,
     rejectedBySequenceSimulation:expanded.filter(x=>!x.validation.simulationPassed).length,
+    rejectedByReachability:expanded.filter(x=>x.validation.simulationPassed && !x.reachability.reachable).length,
+    rejectedByLaneValidation:expanded.filter(x=>x.validation.simulationPassed && x.reachability.reachable && !x.laneValidation.valid).length,
+    reachableCandidates:expanded.filter(x=>x.reachability.reachable).length,
+    topCandidateReachable:best?.reachability?.reachable??false,
+    topCandidateReachabilityPathLength:best?.reachability?.pathLength??null,
+    topCandidateReachabilityStates:best?.reachability?.statesExamined??null,
+    topCandidateLaneValid:best?.laneValidation?.valid??false,
     exposureFailures:expanded.reduce((n,x)=>n+x.validation.simulation.failures.filter(f=>f.type==='EXPOSURE').length,0),
     holdTimingFailures:expanded.reduce((n,x)=>n+x.validation.simulation.failures.filter(f=>f.type==='HOLD_TIMING'||f.type==='HOLD_CONFLICT').length,0),
     inventoryTimelineFailures:expanded.reduce((n,x)=>n+x.validation.simulation.failures.filter(f=>f.type==='INVENTORY_TIMELINE').length,0),
@@ -973,9 +1128,9 @@ function analyzeEndgamePlans(s){
 
   return {
     mode:'DIAGNOSTIC_ONLY',
-    plannerVersion:'v0.6-endgame-sequence-sim',
+    plannerVersion:'v0.7-endgame-reachability',
     coreTargets:[...ENDGAME_CORE_TARGETS],
-    explanation:'Uses the complement map exhaustively, reconstructs a late-game corridor, actually simulates each proposed endgame in order, rejects exposure/Hold/resource/timeline failures, then derives LITP and lanes from the survivors. The full-plan search is not yet forced to follow the result.',
+    explanation:'Uses the complement map exhaustively, simulates each proposed endgame, then searches from the real starting puzzle for a path that reaches that endgame corridor while preserving its required resources. LITP and pre/post lanes are validated only on reachable candidates. The full-plan search is still not forced to follow the result.',
     progressMetrics,
     candidateCount:candidates.length,
     selectedForDisplay:best?.id||null,
@@ -1000,7 +1155,7 @@ function renderEndgameAnalysis(a){
   const litp=best.inventoryTarget.litp.determined
     ? `LITP ${best.inventoryTarget.litp.tileId} (${best.inventoryTarget.litp.emoji})`
     : 'LITP not yet determined';
-  summary.textContent=`Diagnostic only — ${t1}. ${litp}. Sequence simulation ${best.validation.simulationPassed?'PASS':'FAIL'}; feasibility ${best.validation.feasibilityScore}/100.`;
+  summary.textContent=`Diagnostic only — ${t1}. ${litp}. Sequence ${best.validation.simulationPassed?'PASS':'FAIL'}; reachability ${best.reachability?.reachable?'PASS':'FAIL'}; lanes ${best.laneValidation?.valid?'PASS':'FAIL'}; feasibility ${best.validation.feasibilityScore}/100.`;
 
   const lines=best.inventoryTarget.structuralExecution.map((j,i)=>`${i+1}. ${j.label}`);
   const protect=best.inventoryTarget.protectedInventoryIds.length
@@ -1012,7 +1167,7 @@ function renderEndgameAnalysis(a){
   const lanes=best.inventoryTarget.lanes.available
     ? `LITP lanes: pre ${best.inventoryTarget.lanes.preLaneLabel}; post ${best.inventoryTarget.lanes.postLaneLabel}`
     : 'LITP lanes unavailable.';
-  const metrics=`Progress: complement options ${m.totalComplementOptions}; sequence rejects ${m.rejectedBySequenceSimulation}; executable candidates ${m.executableCandidates}; exposure failures ${m.exposureFailures}; Hold failures ${m.holdTimingFailures}; inventory-timeline failures ${m.inventoryTimelineFailures}; core coverage ${m.coreCoveragePercent}%.`;
+  const metrics=`Progress: complement options ${m.totalComplementOptions}; sequence rejects ${m.rejectedBySequenceSimulation}; reachability rejects ${m.rejectedByReachability}; lane rejects ${m.rejectedByLaneValidation}; fully viable ${m.executableCandidates}; core coverage ${m.coreCoveragePercent}%.`;
   body.textContent=`Top reasoned endgame (earlier → later):\n${lines.join('\n')}\n${protect}\n${holds}\n${lanes}\n${metrics}`;
 }
 
