@@ -82,7 +82,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.9.5 — Transport Layout</div>
+<div class="version">Puzzle Pyramid AI JS v0.9.6 — Standard Fast Path</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -130,7 +130,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <div class="download-row">
   <button id="download-button">Download Solver Log</button>
 </div>
-<div class="solver-note">v0.9.5 validates backward endgame hypotheses, then runs a shared-budget reachability phase from the real starting puzzle. Reachability can be REACHABLE, UNREACHABLE, or UNKNOWN when the budget expires. The page yields during this phase so iPhone Safari stays responsive. If none can reach 8260, it falls back to the normal full-plan solver. Completed games receive the 500 solve bonus plus the 1260 time bonus. Independent solving uses hard wall-clock budgets for ENDGAME, REACHABILITY, 8260 PROBE, and search. STANDARD now adds bounded Hold Corridor awareness while preserving the phone-safe baseline. DEEP uses a longer Hold Corridor / Bridge search plus phase-aware strategy: short micro-streaks are acceptable during setup, long streaks are prioritized after inventory exposure, reset cost is phase-sensitive, and a diversity-preserving beam keeps alternative strategy families alive. In Demo-Informed mode, Deep may also use aggregate human strategy traits such as longest streak, reset count, and setup timing — never recorded move IDs or move order. REACHABILITY is a bounded proof attempt: when its budget expires it returns UNKNOWN and the solver continues instead of blocking. The solution is calculated automatically before playback. Choose Fast, Normal, or Slow playback; Normal is the default. During playback, Draw/Reset progress appears above Draw, while consecutive Match/Clear/Hold/Match-Hold actions are counted above Hold as 1/N, 2/N, and so on. v0.9.4 stores a complete playback snapshot after every solver move, so repeated Back/Forward stepping restores the exact prior board, inventory, Hold, score, streak, log, and completion state. Matching and Hold moves visibly drag tiles. Draw playback shows 1/1, 1/6… above Draw, and RESET appears above the button when the inventory is reset.</div>
+<div class="solver-note">v0.9.6 gives STANDARD a true fast path: it skips backward Endgame-First generation, Reachability, LITP, and lane validation, then goes directly to the 8260 Perfect Score Probe and forward full-plan search. DEEP keeps the complete backward endgame/reachability/LITP pipeline and uses its result as forward-search guidance. Both modes retain inventory-wave reasoning, post-reset projection, Hold Corridor skills, playback snapshots, and the four transport controls. Playback Speed includes Ultra 0.30 sec.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -155,7 +155,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <div class="plan-summary" id="endgamePanel">
   <h2>Endgame-First Analysis</h2>
-  <div id="endgameSummary" class="plan-status">Analyzing how Tile 1 can be cleared…</div>
+  <div id="endgameSummary" class="plan-status">Endgame analysis status pending…</div>
   <div id="endgameCandidates" class="plan-progress"></div>
 </div>
 <div class="plan-summary" id="memoryPanel">
@@ -178,7 +178,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.9.5-transport-layout';
+const VERSION='Puzzle Pyramid AI JS v0.9.6-standard-fast-path';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -389,7 +389,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'hold-corridor-transport-layout-v0.9.5',endgamePlanner:true,endgamePlannerMode:'diagnostic',litpReasoning:true,endgameSequenceValidation:true,endgameSequenceSimulator:true,endgameReachability:true,litpLaneValidation:true,progressMetrics:true,inventoryTargetBuilder:true,inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true,holdCorridorAwareness:true,holdCorridorStandard:true,holdCorridorDeepPlanner:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'standard-fast-path-v0.9.6',endgamePlanner:SOLVER_DEPTH_MODE==='DEEP',endgamePlannerMode:SOLVER_DEPTH_MODE==='DEEP'?'diagnostic':'skipped-standard',litpReasoning:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceValidation:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceSimulator:SOLVER_DEPTH_MODE==='DEEP',endgameReachability:SOLVER_DEPTH_MODE==='DEEP',litpLaneValidation:SOLVER_DEPTH_MODE==='DEEP',progressMetrics:true,inventoryTargetBuilder:SOLVER_DEPTH_MODE==='DEEP',inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true,holdCorridorAwareness:true,holdCorridorStandard:true,holdCorridorDeepPlanner:true,standardEndgameSkipped:SOLVER_DEPTH_MODE==='STANDARD'},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
 demoMovesUsed:(solverPlanResult?.memoryReplay?solverPlan.length:0),
 solverDepthMode:SOLVER_DEPTH_MODE,
 learnedStrategyUse:{
@@ -1536,6 +1536,13 @@ async function analyzeEndgamePlans(s){
       rankIfKept:i+1,structuralScore:x.p.score,feasibilityScore:x.validation.feasibilityScore,reasons:x.validation.notes
     }))
   };
+}
+
+function renderStandardEndgameSkipped(){
+  const summary=document.getElementById('endgameSummary');
+  const body=document.getElementById('endgameCandidates');
+  if(summary) summary.textContent='Skipped in STANDARD mode — backward endgame, reachability, LITP, and lane analysis are reserved for DEEP.';
+  if(body) body.textContent='STANDARD goes directly to the 8260 probe and forward full-plan search.';
 }
 function renderEndgameAnalysis(a){
   const summary=document.getElementById('endgameSummary');
@@ -2784,15 +2791,15 @@ async function prepareSolverPlan(){
   startButton.disabled=true; forwardButton.disabled=true;
   solverDeadline=performance.now()+SOLVER_TOTAL_TIME_BUDGET_MS; solverPhaseDeadline=0; solverTimedOut=false;
   solverPhaseStats={
-    endgame:{elapsedMs:0,truncated:false,candidatesValidated:0},
-    reachability:{elapsedMs:0,truncated:false,states:0},
+    endgame:{elapsedMs:0,truncated:false,candidatesValidated:0,skipped:false},
+    reachability:{elapsedMs:0,truncated:false,states:0,skipped:false},
     perfectProbe:{elapsedMs:0,truncated:false,states:0},
     fullSearch:{elapsedMs:0,truncated:false,states:0}
   };
   solverDeepStats={enabled:SOLVER_DEPTH_MODE==='DEEP',standardBaselineScore:null,selectedScore:null,improvement:0,teacherProfileUsed:false,teacherProfile:null,passes:[]};
   holdCorridorStats={calls:0,nodes:0,closuresFound:0,standardCalls:0,deepCalls:0,longestProjectedCorridor:0,bestProjectedValue:0};
   holdCorridorMemo.clear();
-  calc.textContent='ENDGAME';
+  calc.textContent=SOLVER_DEPTH_MODE==='DEEP'?'ENDGAME':'8260 PROBE';
   solverSessionStats={decisions:0,totalNodes:0,duplicates:0,deadBranches:0,limitHits:0};
   solverActualSeen=new Map(); solverPlan=[]; solverPlanIndex=0; solverPlanResult=null;
   solverPlaybackSnapshots=[];
@@ -2809,11 +2816,26 @@ async function prepareSolverPlan(){
       calc.textContent=(known.finalScore??'Demo').toLocaleString?.()||String(known.finalScore??'Demo'); updatePlanPanel(solverPlanResult,solverPlanResult.stopReason); renderMemoryInfo(); startButton.disabled=false; forwardButton.disabled=false; setStatus(`Known human demo ready: ${known.finalScore??'?'} points. Press Start Solver to replay it.`); return;
     }
   }
-  solverEndgameAnalysis=await analyzeEndgamePlans(simClone(state)); renderMemoryInfo();
-  renderEndgameAnalysis(solverEndgameAnalysis);
-  setStatus('Endgame diagnostic complete. Running phone-safe 8260 probe…');
-  calc.textContent='8260 PROBE';
-  document.getElementById('planProgress').textContent='Endgame hypotheses preserved; 8260 Perfect Score Probe starting…';
+  if(SOLVER_DEPTH_MODE==='DEEP'){
+    solverEndgameAnalysis=await analyzeEndgamePlans(simClone(state));
+    renderMemoryInfo();
+    renderEndgameAnalysis(solverEndgameAnalysis);
+    setStatus('Deep endgame diagnostic complete. Running phone-safe 8260 probe…');
+    calc.textContent='8260 PROBE';
+    document.getElementById('planProgress').textContent='Deep endgame hypotheses preserved; 8260 Perfect Score Probe starting…';
+  }else{
+    // v0.9.6 STANDARD fast path:
+    // Do not spend time generating backward endgame hypotheses, reachability,
+    // LITP, or lane analysis because STANDARD does not use endgameGuidanceScore.
+    solverEndgameAnalysis=null;
+    solverPhaseStats.endgame.skipped=true;
+    solverPhaseStats.reachability.skipped=true;
+    renderStandardEndgameSkipped();
+    renderMemoryInfo();
+    setStatus('STANDARD fast path: skipping backward endgame/reachability. Running 8260 probe…');
+    calc.textContent='8260 PROBE';
+    document.getElementById('planProgress').textContent='STANDARD: endgame/reachability skipped; 8260 Perfect Score Probe starting…';
+  }
 
   // v0.8.4: initialize timing before every possible probe path, including
   // the "overall time already expired" skip path.
