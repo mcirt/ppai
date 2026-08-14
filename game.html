@@ -56,7 +56,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">Puzzle Pyramid AI JS v0.9.2 — Canonical Human Logger</div>
+<div class="version">Puzzle Pyramid AI JS v0.9.9 — Canonical Human Logger</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -81,7 +81,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.9.2';
+const VERSION='Puzzle Pyramid AI JS v0.9.9';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -103,7 +103,7 @@ const SOLVE_BONUS=500;
 const TIME_BONUS=1260;
 const PERFECT_SCORE=8260;
 
-let state={ tileData:{}, stockQueue:[], inPlay:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, completionApplied:false, solveBonus:0, timeBonus:0 };
+let state={ tileData:{}, stockQueue:[], inPlay:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, completionApplied:false, solveBonus:0, timeBonus:0, remainingTileBonus:0, remainingTiles:0 };
 let history=[];
 let selected=null;
 let pointerSession=null;
@@ -174,12 +174,44 @@ function commitLog(type,summary,details={}){
   state.logs.push(entry); renderLog();
 }
 function inventoryUsedCount(s=state){ let n=0; for(let i=29;i<=52;i++) if(s.tileData[i]===null)n++; return n; }
+function remainingInventoryTileCount(s=state){ let n=0; for(let i=29;i<=52;i++) if(s.tileData[i]!==null)n++; return n; }
+function remainingPyramidTileCount(s=state){ let n=0; for(let i=1;i<=28;i++) if(s.tileData[i]!==null)n++; return n; }
+function remainingHoldTileCount(s=state){ return s.hold?1:0; }
+function remainingTileCount(s=state){ return remainingPyramidTileCount(s)+remainingInventoryTileCount(s)+remainingHoldTileCount(s); }
+function remainingTileBonus(s=state){ return remainingTileCount(s)*50; }
 function applyCompletionBonuses(reason='Puzzle complete'){
   if(state.completionApplied) return;
-  state.completionApplied=true; state.solveBonus=SOLVE_BONUS; state.timeBonus=TIME_BONUS;
-  state.score+=SOLVE_BONUS+TIME_BONUS;
-  flashPoints(`+${(SOLVE_BONUS+TIME_BONUS).toLocaleString()} bonuses`);
-  commitLog('COMPLETE',`${reason}. +${SOLVE_BONUS} completion bonus +${TIME_BONUS} time bonus. Final score: ${state.score}.`,{solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,inventoryUsed:inventoryUsedCount(state),perfectScore:state.score===PERFECT_SCORE});
+  state.completionApplied=true;
+
+  const remainingPyramid=remainingPyramidTileCount(state);
+  const remainingInventory=remainingInventoryTileCount(state);
+  const remainingHold=remainingHoldTileCount(state);
+  const remainingTiles=remainingPyramid+remainingInventory+remainingHold;
+  const tileBonus=remainingTiles*50;
+
+  state.remainingTileBonus=tileBonus;
+  state.remainingTiles=remainingTiles;
+  state.solveBonus=SOLVE_BONUS;
+  state.timeBonus=TIME_BONUS;
+  state.score+=tileBonus+SOLVE_BONUS+TIME_BONUS;
+
+  flashPoints(`+${(tileBonus+SOLVE_BONUS+TIME_BONUS).toLocaleString()} final bonuses`);
+  commitLog(
+    'COMPLETE',
+    `${reason}. +${tileBonus} remaining-tile bonus (${remainingTiles} × 50; Hold included if occupied) +${SOLVE_BONUS} completion bonus +${TIME_BONUS} time bonus. Final score: ${state.score}.`,
+    {
+      solveBonus:SOLVE_BONUS,
+      timeBonus:TIME_BONUS,
+      remainingTileBonus:tileBonus,
+      remainingTiles,
+      remainingPyramid,
+      remainingInventory,
+      remainingHold,
+      holdCounted:remainingHold===1,
+      inventoryUsed:inventoryUsedCount(state),
+      perfectScore:state.score===PERFECT_SCORE
+    }
+  );
 }
 function centerOf(el){ const r=el.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; }
 async function animateUnmatchedBurst(ref){
@@ -270,7 +302,7 @@ function renderInventory(){
 function renderHold(){
   const el=document.getElementById('tileh'); const emoji=state.hold?.emoji||''; el.classList.toggle('occupied',!!emoji); el.querySelector('.holdtext').style.visibility=emoji?'hidden':'visible'; if(emoji) applyEmojiFace(el,emoji); else { applyEmojiFace(el,null); el.style.backgroundColor='transparent'; }
 }
-function renderScore(){ const suffix=state.completionApplied?` (includes +${state.solveBonus} solve +${state.timeBonus} time)`:''; document.getElementById('score').textContent=`Score: ${state.score}${suffix}`; }
+function renderScore(){ const suffix=state.completionApplied?` (includes +${state.remainingTileBonus||0} remaining +${state.solveBonus} solve +${state.timeBonus} time)`:''; document.getElementById('score').textContent=`Score: ${state.score}${suffix}`; }
 function renderLog(){ const ol=document.getElementById('moveLog'); ol.innerHTML=''; state.logs.forEach(e=>{const li=document.createElement('li'); li.textContent=e.summary; ol.appendChild(li);}); ol.scrollTop=ol.scrollHeight; }
 function renderSelection(){ clearHighlights(); if(!selected) return; const el=elementForRef(selected); if(el) el.classList.add('selected'); }
 function clearHighlights(){ document.querySelectorAll('.selected,.valid-target,.invalid-target').forEach(el=>el.classList.remove('selected','valid-target','invalid-target')); }
@@ -360,7 +392,20 @@ function canonicalEvents(){
     else if(e.type==='RESET') details={...details,survivorTileIds:d.survivorTileIds||[],stockQueueAfter:d.stockQueueAfter||[]};
     events.push({action:'ACT',details});
   }
-  events.push({action:'ACT',details:{type:'FINAL_SCORE',finalScore:state.score,finalDisplayedScore:state.score-(state.solveBonus||0)-(state.timeBonus||0),solveBonus:state.solveBonus||0,timeBonus:state.timeBonus||0,totalBonuses:(state.solveBonus||0)+(state.timeBonus||0),inventoryUsed:inventoryUsedCount(state),perfectScore:state.score===PERFECT_SCORE}});
+  events.push({action:'ACT',details:{
+    type:'FINAL_SCORE',
+    finalScore:state.score,
+    finalDisplayedScore:state.score-(state.solveBonus||0)-(state.timeBonus||0)-(state.remainingTileBonus||0),
+    remainingTileBonus:state.remainingTileBonus||0,
+    remainingTiles:state.remainingTiles||0,
+    remainingHold:remainingHoldTileCount(state),
+    holdCounted:remainingHoldTileCount(state)===1,
+    solveBonus:state.solveBonus||0,
+    timeBonus:state.timeBonus||0,
+    totalBonuses:(state.remainingTileBonus||0)+(state.solveBonus||0)+(state.timeBonus||0),
+    inventoryUsed:inventoryUsedCount(state),
+    perfectScore:state.score===PERFECT_SCORE
+  }});
   return events;
 }
 function buildHumanPayload(){
@@ -373,7 +418,7 @@ function buildHumanPayload(){
     puzzle:{sourceFilename:sourceFilename||null,puzzleSignature:puzzleSignature(initialTileData),initialTileData:JSON.parse(JSON.stringify(initialTileData))},
     moves:state.logs,
     canonicalDemo:{events:canonicalEvents()},
-    result:{solved:!!state.gameOver,finalScore:state.score,solveBonus:state.solveBonus||0,timeBonus:state.timeBonus||0,perfectScore:state.score===PERFECT_SCORE,inventoryUsed:inventoryUsedCount(state),longestFinalStreak:state.streak,durationMs:Date.now()-gameStartedAt},
+    result:{solved:!!state.gameOver,finalScore:state.score,remainingTileBonus:state.remainingTileBonus||0,remainingTiles:state.remainingTiles||0,remainingHold:remainingHoldTileCount(state),holdCounted:remainingHoldTileCount(state)===1,solveBonus:state.solveBonus||0,timeBonus:state.timeBonus||0,perfectScore:state.score===PERFECT_SCORE,inventoryUsed:inventoryUsedCount(state),longestFinalStreak:state.streak,durationMs:Date.now()-gameStartedAt},
     finalState:state,
     historyDepth:history.length
   };

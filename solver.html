@@ -82,7 +82,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.9.8 — Persistent Playback Counters</div>
+<div class="version">Puzzle Pyramid AI JS v0.9.9 — Hold-Inclusive Final Count</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -130,7 +130,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <div class="download-row">
   <button id="download-button">Download Solver Log</button>
 </div>
-<div class="solver-note">v0.9.8 keeps the STANDARD fast path and Known Demo restart fix, and makes playback counters persistent: Draw, RESET, and Match/Clear/Hold/Match-Hold counters remain visible until the next action changes them; Pause no longer clears them; Back and Restart restore the correct counter state for that playback snapshot. STANDARD it skips backward Endgame-First generation, Reachability, LITP, and lane validation, then goes directly to the 8260 Perfect Score Probe and forward full-plan search. DEEP keeps the complete backward endgame/reachability/LITP pipeline and uses its result as forward-search guidance. Both modes retain inventory-wave reasoning, post-reset projection, Hold Corridor skills, playback snapshots, and the four transport controls. Playback Speed includes Ultra 0.30 sec.</div>
+<div class="solver-note">v0.9.8 keeps the STANDARD fast path and Known Demo restart fix, and makes playback counters persistent: Draw, RESET, and Match/Clear/Hold/Match-Hold counters remain visible until the next action changes them; Pause no longer clears them; Back and Restart restore the correct counter state for that playback snapshot. STANDARD it skips backward Endgame-First generation, Reachability, LITP, and lane validation, then goes directly to the 8260 Perfect Score Probe and forward full-plan search. DEEP keeps the complete backward endgame/reachability/LITP pipeline and uses its result as forward-search guidance. Both modes retain inventory-wave reasoning, post-reset projection, Hold Corridor skills, playback snapshots, and the four transport controls. Playback Speed includes Ultra 0.30 sec. Final scoring now awards 50 points for every tile still remaining when Tile 1 is cleared, including one tile in Hold if occupied.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -178,7 +178,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.9.8-persistent-playback-counters';
+const VERSION='Puzzle Pyramid AI JS v0.9.9-hold-inclusive-final-count';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -200,7 +200,7 @@ const SOLVE_BONUS=500;
 const TIME_BONUS=1260;
 const PERFECT_SCORE=8260;
 
-let state={ tileData:{}, stockQueue:[], inPlay:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, resetsUsed:0, completionApplied:false, solveBonus:0, timeBonus:0 };
+let state={ tileData:{}, stockQueue:[], inPlay:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, resetsUsed:0, completionApplied:false, solveBonus:0, timeBonus:0, remainingTileBonus:0, remainingTiles:0 };
 let history=[];
 let selected=null;
 let pointerSession=null;
@@ -264,15 +264,64 @@ function commitLog(type,summary,details={}){
   state.logs.push(entry); renderLog();
 }
 function inventoryUsedCount(s=state){ let n=0; for(let i=29;i<=52;i++) if(s.tileData[i]===null)n++; return n; }
+
+function remainingInventoryTileCount(s=state){
+  let n=0;
+  for(let i=29;i<=52;i++) if(s.tileData[i]!==null) n++;
+  return n;
+}
+function remainingPyramidTileCount(s=state){
+  let n=0;
+  for(let i=1;i<=28;i++) if(s.tileData[i]!==null) n++;
+  return n;
+}
+function remainingHoldTileCount(s=state){
+  return s.hold ? 1 : 0;
+}
+function remainingTileCount(s=state){
+  return remainingPyramidTileCount(s) + remainingInventoryTileCount(s) + remainingHoldTileCount(s);
+}
+function remainingTileBonus(s=state){
+  return remainingTileCount(s) * 50;
+}
+
 function remainingPyramidCount(s=state){ let n=0; for(let i=1;i<=28;i++) if(s.tileData[i]!==null)n++; return n; }
 function streakScore(n){ if(n<=0)return 0; if(n===1)return 50; if(n===2)return 150; if(n===3)return 300; if(n===4)return 500; return 500+(n-4)*250; }
 function perfectRoutePossible(s=state){ if(s.gameOver)return s.score===PERFECT_SCORE&&inventoryUsedCount(s)===24; return s.score===streakScore(s.streak); }
 function applyCompletionBonuses(reason='Puzzle complete'){
   if(state.completionApplied) return;
-  state.completionApplied=true; state.solveBonus=SOLVE_BONUS; state.timeBonus=TIME_BONUS;
-  state.score+=SOLVE_BONUS+TIME_BONUS;
-  flashPoints(`+${(SOLVE_BONUS+TIME_BONUS).toLocaleString()} bonuses`);
-  commitLog('COMPLETE',`${reason}. +${SOLVE_BONUS} completion bonus +${TIME_BONUS} time bonus. Final score: ${state.score}.`,{solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,inventoryUsed:inventoryUsedCount(state),perfectScore:state.score===PERFECT_SCORE});
+  state.completionApplied=true;
+
+  const remainingPyramid=remainingPyramidTileCount(state);
+  const remainingInventory=remainingInventoryTileCount(state);
+  const remainingHold=remainingHoldTileCount(state);
+  const remainingTiles=remainingPyramid+remainingInventory+remainingHold;
+  const tileBonus=remainingTiles*50;
+
+  state.solveBonus=SOLVE_BONUS;
+  state.timeBonus=TIME_BONUS;
+  state.remainingTileBonus=tileBonus;
+  state.remainingTiles=remainingTiles;
+
+  state.score+=tileBonus+SOLVE_BONUS+TIME_BONUS;
+
+  flashPoints(`+${(tileBonus+SOLVE_BONUS+TIME_BONUS).toLocaleString()} final bonuses`);
+  commitLog(
+    'COMPLETE',
+    `${reason}. +${tileBonus} remaining-tile bonus (${remainingTiles} × 50; Hold included if occupied) +${SOLVE_BONUS} completion bonus +${TIME_BONUS} time bonus. Final score: ${state.score}.`,
+    {
+      solveBonus:SOLVE_BONUS,
+      timeBonus:TIME_BONUS,
+      remainingTileBonus:tileBonus,
+      remainingTiles,
+      remainingPyramid,
+      remainingInventory,
+      remainingHold,
+      holdCounted:remainingHold===1,
+      inventoryUsed:inventoryUsedCount(state),
+      perfectScore:state.score===PERFECT_SCORE
+    }
+  );
 }
 function clearUnmatched(ref){
   if(!isPlayable(ref)||!UNMATCHED.has(emojiOf(ref))){ setStatus('That unmatched tile is not currently playable.'); return false; }
@@ -340,7 +389,7 @@ function renderInventory(){
 function renderHold(){
   const el=document.getElementById('tileh'); const emoji=state.hold?.emoji||''; el.classList.toggle('occupied',!!emoji); el.querySelector('.holdtext').style.visibility=emoji?'hidden':'visible'; if(emoji) applyEmojiFace(el,emoji); else { applyEmojiFace(el,null); el.style.backgroundColor='transparent'; }
 }
-function renderScore(){ const suffix=state.completionApplied?` (includes +${state.solveBonus} solve +${state.timeBonus} time)`:''; document.getElementById('score').textContent=`Score: ${state.score}${suffix}`; }
+function renderScore(){ const suffix=state.completionApplied?` (includes +${state.remainingTileBonus||0} remaining +${state.solveBonus} solve +${state.timeBonus} time)`:''; document.getElementById('score').textContent=`Score: ${state.score}${suffix}`; }
 function renderLog(){ const ol=document.getElementById('moveLog'); ol.innerHTML=''; state.logs.forEach(e=>{const li=document.createElement('li'); li.textContent=e.summary; ol.appendChild(li);}); ol.scrollTop=ol.scrollHeight; }
 function renderSelection(){ clearHighlights(); if(!selected) return; const el=elementForRef(selected); if(el) el.classList.add('selected'); }
 function clearHighlights(){ document.querySelectorAll('.selected,.valid-target,.invalid-target').forEach(el=>el.classList.remove('selected','valid-target','invalid-target')); }
@@ -389,7 +438,7 @@ function localTimestampForFilename(){
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'persistent-playback-counters-v0.9.8',endgamePlanner:SOLVER_DEPTH_MODE==='DEEP',endgamePlannerMode:SOLVER_DEPTH_MODE==='DEEP'?'diagnostic':'skipped-standard',litpReasoning:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceValidation:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceSimulator:SOLVER_DEPTH_MODE==='DEEP',endgameReachability:SOLVER_DEPTH_MODE==='DEEP',litpLaneValidation:SOLVER_DEPTH_MODE==='DEEP',progressMetrics:true,inventoryTargetBuilder:SOLVER_DEPTH_MODE==='DEEP',inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true,holdCorridorAwareness:true,holdCorridorStandard:true,holdCorridorDeepPlanner:true,standardEndgameSkipped:SOLVER_DEPTH_MODE==='STANDARD'},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'hold-inclusive-final-count-v0.9.9',endgamePlanner:SOLVER_DEPTH_MODE==='DEEP',endgamePlannerMode:SOLVER_DEPTH_MODE==='DEEP'?'diagnostic':'skipped-standard',litpReasoning:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceValidation:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceSimulator:SOLVER_DEPTH_MODE==='DEEP',endgameReachability:SOLVER_DEPTH_MODE==='DEEP',litpLaneValidation:SOLVER_DEPTH_MODE==='DEEP',progressMetrics:true,inventoryTargetBuilder:SOLVER_DEPTH_MODE==='DEEP',inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true,holdCorridorAwareness:true,holdCorridorStandard:true,holdCorridorDeepPlanner:true,standardEndgameSkipped:SOLVER_DEPTH_MODE==='STANDARD',remainingTileBonusPerTile:50,holdCountsAsRemainingTile:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
 demoMovesUsed:(solverPlanResult?.memoryReplay?solverPlan.length:0),
 solverDepthMode:SOLVER_DEPTH_MODE,
 learnedStrategyUse:{
@@ -576,7 +625,17 @@ function simRemove(s,ref){
   if(id>=29){ const i=s.inPlay.indexOf(id); if(i>=0)s.inPlay.splice(i,1); const q=s.stockQueue.indexOf(id); if(q>=0)s.stockQueue.splice(q,1); }
 }
 function simAward(s){ s.streak++; s.score+=Math.min(s.streak,5)*50; }
-function simComplete(s){ if(s.completionApplied)return; s.gameOver=true; s.completionApplied=true; s.solveBonus=SOLVE_BONUS; s.timeBonus=TIME_BONUS; s.score+=SOLVE_BONUS+TIME_BONUS; }
+function simComplete(s){
+  if(s.completionApplied)return;
+  s.gameOver=true;
+  s.completionApplied=true;
+  const tileBonus=remainingTileBonus(s);
+  s.solveBonus=SOLVE_BONUS;
+  s.timeBonus=TIME_BONUS;
+  s.remainingTileBonus=tileBonus;
+  s.remainingTiles=remainingTileCount(s);
+  s.score+=tileBonus+SOLVE_BONUS+TIME_BONUS;
+}
 function simPlayableRefs(s){
   const refs=[];
   for(let i=1;i<=28;i++) if(s.tileData[i]&&simPyramidPlayable(s,i)) refs.push({zone:'pyramid',tileId:i});
@@ -2816,7 +2875,7 @@ async function solverLoop(){
     await new Promise(r=>setTimeout(r,Math.max(90,Math.round(solverPreviewMs*.18))));
   }
   solverRunning=false;
-  if(state.gameOver){ document.getElementById('calculated-score-value').textContent=`FINAL ${state.score.toLocaleString()}`; document.getElementById('planProgress').textContent=`Plan completed. Final score: ${state.score.toLocaleString()} (includes +${SOLVE_BONUS} completion +${TIME_BONUS} time). Inventory used: ${inventoryUsedCount(state)}/24.`; }
+  if(state.gameOver){ document.getElementById('calculated-score-value').textContent=`FINAL ${state.score.toLocaleString()}`; document.getElementById('planProgress').textContent=`Plan completed. Final score: ${state.score.toLocaleString()} (includes +${state.remainingTileBonus||0} remaining-tile bonus +${SOLVE_BONUS} completion +${TIME_BONUS} time). Inventory used: ${inventoryUsedCount(state)}/24.`; }
   else if(solverPlanIndex>=solverPlan.length) setStatus('Saved plan finished.');
   updatePlaybackTransport();
 }
