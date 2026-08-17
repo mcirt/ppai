@@ -56,7 +56,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">Puzzle Pyramid AI JS v0.10.0 — Real-Game Inventory Slots & Shortcuts</div>
+<div class="version">Puzzle Pyramid AI JS v0.10.1 — Sliding Inventory Window</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -81,7 +81,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.10.0';
+const VERSION='Puzzle Pyramid AI JS v0.10.1';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -103,7 +103,7 @@ const SOLVE_BONUS=500;
 const TIME_BONUS=1260;
 const PERFECT_SCORE=8260;
 
-let state={ tileData:{}, stockQueue:[], inPlay:[], inventoryGroups:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, completionApplied:false, solveBonus:0, timeBonus:0, remainingTileBonus:0, remainingTiles:0 };
+let state={ tileData:{}, stockQueue:[], inPlay:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, completionApplied:false, solveBonus:0, timeBonus:0, remainingTileBonus:0, remainingTiles:0 };
 let history=[];
 let selected=null;
 let pointerSession=null;
@@ -128,7 +128,7 @@ function loadInitialState(){
   const raw=localStorage.getItem('pyramidSolitaireTileData')||localStorage.getItem('tileData');
   if(!raw){ setStatus('No board data found. Return to index.html and load a puzzle.'); return; }
   const data=JSON.parse(raw); state.tileData={}; for(let i=1;i<=52;i++) state.tileData[i]=data[i]??data[String(i)]??null;
-  state.stockQueue=[]; for(let i=29;i<=52;i++) if(state.tileData[i]) state.stockQueue.push(i); state.inventoryGroups=[];
+  state.stockQueue=[]; for(let i=29;i<=52;i++) if(state.tileData[i]) state.stockQueue.push(i);
   initialTileData=JSON.parse(JSON.stringify(state.tileData)); gameStartedAt=Date.now(); lastDecisionAt=gameStartedAt;
   renderAll(); bindPointerEvents();
 }
@@ -146,23 +146,19 @@ function emojiOf(ref){
 function isPyramidPlayableInState(s,id){ const blockers=BLOCKERS[id]||[]; return blockers.every(b=>s.tileData[b]===null); }
 function isPyramidPlayable(id){ return isPyramidPlayableInState(state,id); }
 
-function normalizeInventoryGroups(s){
-  if(!Array.isArray(s.inventoryGroups)) s.inventoryGroups=[];
-  return s.inventoryGroups;
+function currentInventoryAscending(s=state){
+  return [...s.inPlay].filter(id=>s.tileData[id]!==null).sort((a,b)=>a-b);
 }
 function visibleInventorySlots(s=state){
-  const groups=normalizeInventoryGroups(s);
-  for(let i=groups.length-1;i>=0;i--){
-    const g=groups[i]||{};
-    const slots={
-      x:(g.x && s.tileData[g.x]!==null)?Number(g.x):null,
-      y:(g.y && s.tileData[g.y]!==null)?Number(g.y):null,
-      z:(g.z && s.tileData[g.z]!==null)?Number(g.z):null,
-      groupIndex:i
-    };
-    if(slots.x||slots.y||slots.z) return slots;
+  const ids=currentInventoryAscending(s);
+  const n=ids.length;
+  if(n>=3){
+    const v=ids.slice(-3);
+    return {x:v[0],y:v[1],z:v[2]};
   }
-  return {x:null,y:null,z:null,groupIndex:-1};
+  if(n===2) return {x:ids[0],y:ids[1],z:null};
+  if(n===1) return {x:ids[0],y:null,z:null};
+  return {x:null,y:null,z:null};
 }
 function currentInventoryIds(s=state){
   const slots=visibleInventorySlots(s);
@@ -181,20 +177,10 @@ function isPlayableInState(s,ref){
 function isPlayable(ref){ return isPlayableInState(state,ref); }
 
 function clearInventorySlotForId(s,id){
-  const groups=normalizeInventoryGroups(s);
-  for(const g of groups){
-    if(!g) continue;
-    if(Number(g.x)===Number(id)) g.x=null;
-    if(Number(g.y)===Number(id)) g.y=null;
-    if(Number(g.z)===Number(id)) g.z=null;
-  }
+  // No persistent slot map in the sliding-window model.
 }
 function addInventoryDrawGroup(s,drawn){
-  normalizeInventoryGroups(s).push({
-    x:drawn[0]??null,
-    y:drawn[1]??null,
-    z:drawn[2]??null
-  });
+  // No per-draw group is stored; visibility derives from surviving in-play tiles.
 }
 function inventoryElementForId(id){
   const n=Number(id);
@@ -402,12 +388,12 @@ function executeImmediateExposureShortcut(source,target){
 function draw(){
   if(state.gameOver) return;
   if(state.stockQueue.length===0){ resetStock(); return; }
-  saveSnapshot(); const streakBefore=state.streak; const drawn=state.stockQueue.splice(0,Math.min(3,state.stockQueue.length)); state.inPlay.push(...drawn); addInventoryDrawGroup(state,drawn); state.streak=0;
+  saveSnapshot(); const streakBefore=state.streak; const drawn=state.stockQueue.splice(0,Math.min(3,state.stockQueue.length)); state.inPlay.push(...drawn); state.streak=0;
   commitLog('DRAW',`Drew ${drawn.map(id=>`${id} (${state.tileData[id]})`).join(', ')}. Streak reset.`,{drawnTileIds:[...drawn],drawnEmojis:drawn.map(id=>state.tileData[id]),streakBefore,stockQueueAfter:[...state.stockQueue],inPlayAfter:[...state.inPlay]}); finishAction();
 }
 function resetStock(){
   if(!state.inPlay.length){ setStatus('No inventory tiles remain.'); return; }
-  saveSnapshot(); const survivorsBefore=[...state.inPlay].sort((a,b)=>a-b),streakBefore=state.streak,scoreBefore=state.score; state.stockQueue=[...survivorsBefore]; state.inPlay=[]; state.inventoryGroups=[]; state.streak=0; const before=state.score; state.score=Math.max(0,state.score-50); const deduction=before-state.score;
+  saveSnapshot(); const survivorsBefore=[...state.inPlay].sort((a,b)=>a-b),streakBefore=state.streak,scoreBefore=state.score; state.stockQueue=[...survivorsBefore]; state.inPlay=[]; state.streak=0; const before=state.score; state.score=Math.max(0,state.score-50); const deduction=before-state.score;
   if(deduction) flashPoints(`-${deduction}`,true); commitLog('RESET',`Reset inventory; -${deduction} points. Streak reset.`,{survivorTileIds:survivorsBefore,stockQueueAfter:[...state.stockQueue],scoreBefore,scoreAfter:state.score,streakBefore,deduction}); finishAction();
 }
 function finishAction(...refs){
