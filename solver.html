@@ -82,7 +82,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.9.9 — Hold-Inclusive Final Count</div>
+<div class="version">Puzzle Pyramid AI JS v0.10.0 — Real-Game Mechanics</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -130,7 +130,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <div class="download-row">
   <button id="download-button">Download Solver Log</button>
 </div>
-<div class="solver-note">v0.9.8 keeps the STANDARD fast path and Known Demo restart fix, and makes playback counters persistent: Draw, RESET, and Match/Clear/Hold/Match-Hold counters remain visible until the next action changes them; Pause no longer clears them; Back and Restart restore the correct counter state for that playback snapshot. STANDARD it skips backward Endgame-First generation, Reachability, LITP, and lane validation, then goes directly to the 8260 Perfect Score Probe and forward full-plan search. DEEP keeps the complete backward endgame/reachability/LITP pipeline and uses its result as forward-search guidance. Both modes retain inventory-wave reasoning, post-reset projection, Hold Corridor skills, playback snapshots, and the four transport controls. Playback Speed includes Ultra 0.30 sec. Final scoring now awards 50 points for every tile still remaining when Tile 1 is cleared, including one tile in Hold if occupied.</div>
+<div class="solver-note">v0.9.8 keeps the STANDARD fast path and Known Demo restart fix, and makes playback counters persistent: Draw, RESET, and Match/Clear/Hold/Match-Hold counters remain visible until the next action changes them; Pause no longer clears them; Back and Restart restore the correct counter state for that playback snapshot. STANDARD it skips backward Endgame-First generation, Reachability, LITP, and lane validation, then goes directly to the 8260 Perfect Score Probe and forward full-plan search. DEEP keeps the complete backward endgame/reachability/LITP pipeline and uses its result as forward-search guidance. Both modes retain inventory-wave reasoning, post-reset projection, Hold Corridor skills, playback snapshots, and the four transport controls. Playback Speed includes Ultra 0.30 sec. Final scoring now awards 50 points for every tile still remaining when Tile 1 is cleared, including one tile in Hold if occupied. v0.10.0 also matches the real-game inventory layout: X/Y/Z positions do not compress when a visible inventory tile is removed; the rightmost occupied visible slot is playable. With Hold empty, dragging a playable tile onto a complementary blocked tile is accepted only when holding the source would immediately expose that target; internally it remains canonical HOLD + MATCH_HOLD.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -178,7 +178,7 @@ h1 { text-align:center; margin:0 0 4px; }
 </div>
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.9.9-hold-inclusive-final-count';
+const VERSION='Puzzle Pyramid AI JS v0.10.0-real-game-mechanics';
 const EMOJI_PAIRS={
   emoji1:'emoji2',emoji2:'emoji1',
   emoji4:'emoji5',emoji5:'emoji4',
@@ -200,7 +200,7 @@ const SOLVE_BONUS=500;
 const TIME_BONUS=1260;
 const PERFECT_SCORE=8260;
 
-let state={ tileData:{}, stockQueue:[], inPlay:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, resetsUsed:0, completionApplied:false, solveBonus:0, timeBonus:0, remainingTileBonus:0, remainingTiles:0 };
+let state={ tileData:{}, stockQueue:[], inPlay:[], inventoryGroups:[], hold:null, score:0, streak:0, moveNumber:0, logs:[], gameOver:false, resetsUsed:0, completionApplied:false, solveBonus:0, timeBonus:0, remainingTileBonus:0, remainingTiles:0 };
 let history=[];
 let selected=null;
 let pointerSession=null;
@@ -220,7 +220,7 @@ function loadInitialState(){
   const raw=localStorage.getItem('pyramidSolitaireTileData')||localStorage.getItem('tileData');
   if(!raw){ setStatus('No board data found. Return to index.html and load a puzzle.'); return; }
   const data=JSON.parse(raw); state.tileData={}; for(let i=1;i<=52;i++) state.tileData[i]=data[i]??data[String(i)]??null;
-  state.stockQueue=[]; for(let i=29;i<=52;i++) if(state.tileData[i]) state.stockQueue.push(i);
+  state.stockQueue=[]; for(let i=29;i<=52;i++) if(state.tileData[i]) state.stockQueue.push(i); state.inventoryGroups=[];
   renderAll(); bindPointerEvents();
 }
 function cloneState(){ return JSON.parse(JSON.stringify(state)); }
@@ -234,14 +234,66 @@ function emojiOf(ref){
   if(ref.zone==='inventory') return state.tileData[ref.tileId]||null;
   return state.tileData[ref.tileId]||null;
 }
-function isPyramidPlayable(id){ const blockers=BLOCKERS[id]||[]; return blockers.every(b=>state.tileData[b]===null); }
-function currentInventoryIds(){ return [...state.inPlay].sort((a,b)=>b-a).slice(0,3); }
-function currentZId(){ return currentInventoryIds()[0]??null; }
-function isPlayable(ref){
-  if(!ref||state.gameOver) return false;
-  if(ref.zone==='hold') return !!state.hold;
-  if(ref.zone==='inventory') return Number(ref.tileId)===currentZId();
-  return !!state.tileData[ref.tileId] && isPyramidPlayable(Number(ref.tileId));
+function isPyramidPlayableInState(s,id){ const blockers=BLOCKERS[id]||[]; return blockers.every(b=>s.tileData[b]===null); }
+function isPyramidPlayable(id){ return isPyramidPlayableInState(state,id); }
+
+function normalizeInventoryGroups(s){
+  if(!Array.isArray(s.inventoryGroups)) s.inventoryGroups=[];
+  return s.inventoryGroups;
+}
+function visibleInventorySlots(s=state){
+  const groups=normalizeInventoryGroups(s);
+  for(let i=groups.length-1;i>=0;i--){
+    const g=groups[i]||{};
+    const slots={
+      x:(g.x && s.tileData[g.x]!==null)?Number(g.x):null,
+      y:(g.y && s.tileData[g.y]!==null)?Number(g.y):null,
+      z:(g.z && s.tileData[g.z]!==null)?Number(g.z):null,
+      groupIndex:i
+    };
+    if(slots.x||slots.y||slots.z) return slots;
+  }
+  return {x:null,y:null,z:null,groupIndex:-1};
+}
+function currentInventoryIds(s=state){
+  const slots=visibleInventorySlots(s);
+  return [slots.z,slots.y,slots.x].filter(id=>id!==null);
+}
+function currentZId(s=state){
+  const slots=visibleInventorySlots(s);
+  return slots.z??slots.y??slots.x??null;
+}
+function isPlayableInState(s,ref){
+  if(!ref||s.gameOver) return false;
+  if(ref.zone==='hold') return !!s.hold;
+  if(ref.zone==='inventory') return Number(ref.tileId)===currentZId(s);
+  return !!s.tileData[ref.tileId] && isPyramidPlayableInState(s,Number(ref.tileId));
+}
+function isPlayable(ref){ return isPlayableInState(state,ref); }
+
+function clearInventorySlotForId(s,id){
+  const groups=normalizeInventoryGroups(s);
+  for(const g of groups){
+    if(!g) continue;
+    if(Number(g.x)===Number(id)) g.x=null;
+    if(Number(g.y)===Number(id)) g.y=null;
+    if(Number(g.z)===Number(id)) g.z=null;
+  }
+}
+function addInventoryDrawGroup(s,drawn){
+  normalizeInventoryGroups(s).push({
+    x:drawn[0]??null,
+    y:drawn[1]??null,
+    z:drawn[2]??null
+  });
+}
+function inventoryElementForId(id){
+  const n=Number(id);
+  for(const slotId of ['tilex','tiley','tilez']){
+    const el=document.getElementById(slotId);
+    if(el && Number(el.dataset.tileId)===n) return el;
+  }
+  return null;
 }
 function isPair(a,b){ const ea=emojiOf(a), eb=emojiOf(b); return !!ea&&!!eb&&EMOJI_PAIRS[ea]===eb; }
 function pointsForNextStreak(){ return Math.min(state.streak+1,5)*50; }
@@ -249,7 +301,11 @@ function awardScoringAction(){ state.streak++; const pts=Math.min(state.streak,5
 function removeRef(ref){
   if(ref.zone==='hold'){ state.hold=null; return; }
   const id=Number(ref.tileId); state.tileData[id]=null;
-  if(id>=29){ const idx=state.inPlay.indexOf(id); if(idx>=0) state.inPlay.splice(idx,1); const s=state.stockQueue.indexOf(id); if(s>=0) state.stockQueue.splice(s,1); }
+  if(id>=29){
+    const idx=state.inPlay.indexOf(id); if(idx>=0) state.inPlay.splice(idx,1);
+    const s=state.stockQueue.indexOf(id); if(s>=0) state.stockQueue.splice(s,1);
+    clearInventorySlotForId(state,id);
+  }
 }
 function describe(ref){
   if(ref.zone==='hold') return `Hold (${emojiOf(ref)})`;
@@ -341,15 +397,102 @@ function moveToHold(ref){
   if(Number(sourceId)===1){ state.gameOver=true; applyCompletionBonuses('Tile 1 moved to Hold. Game complete'); }
   finishAction(ref); return true;
 }
+
+function canImmediateExposureShortcut(source,target){
+  if(!source||!target||state.gameOver||state.hold) return false;
+  if(source.zone==='hold'||target.zone==='hold'||sameRef(source,target)) return false;
+  if(!isPlayable(source)) return false;
+  if(isPlayable(target)) return false; // normal match already handles this.
+  const sourceEmoji=emojiOf(source), targetEmoji=emojiOf(target);
+  if(!sourceEmoji||!targetEmoji||UNMATCHED.has(sourceEmoji)) return false;
+  if(EMOJI_PAIRS[sourceEmoji]!==targetEmoji) return false;
+
+  const test=cloneState();
+  const sourceId=Number(source.tileId);
+  if(source.zone==='inventory'){
+    test.tileData[sourceId]=null;
+    const idx=test.inPlay.indexOf(sourceId); if(idx>=0)test.inPlay.splice(idx,1);
+    const q=test.stockQueue.indexOf(sourceId); if(q>=0)test.stockQueue.splice(q,1);
+    clearInventorySlotForId(test,sourceId);
+  }else{
+    test.tileData[sourceId]=null;
+  }
+  test.hold={emoji:sourceEmoji,sourceId,sourceZone:source.zone};
+  return isPlayableInState(test,target);
+}
+
+function executeImmediateExposureShortcut(source,target){
+  if(!canImmediateExposureShortcut(source,target)){
+    setStatus('That shortcut is not legal.');
+    return false;
+  }
+
+  // One physical gesture, one Undo snapshot, but two canonical game actions:
+  // HOLD source -> newly exposed target becomes playable -> MATCH_HOLD.
+  saveSnapshot();
+
+  const sourceEmoji=emojiOf(source);
+  const targetEmoji=emojiOf(target);
+  const sourceLabel=describe(source);
+  const sourceId=Number(source.tileId);
+  const targetId=Number(target.tileId);
+
+  removeRef(source);
+  state.hold={emoji:sourceEmoji,sourceId,sourceZone:source.zone};
+  commitLog(
+    'HOLD',
+    `Shortcut: moved ${sourceLabel} to Hold, exposing ${describe(target)}.`,
+    {
+      tileId:sourceId,
+      fromZone:source.zone,
+      emoji:sourceEmoji,
+      shortcutGesture:'IMMEDIATE_EXPOSURE_HOLD_MATCH',
+      shortcutTargetId:targetId,
+      shortcutTargetZone:target.zone
+    }
+  );
+
+  const holdRef={zone:'hold',tileId:'h'};
+  if(!isPlayable(target)||!isPair(holdRef,target)){
+    state=history.pop();
+    renderAll();
+    setStatus('Shortcut cancelled because the target did not become legally playable.');
+    return false;
+  }
+
+  const targetLabel=describe(target);
+  removeRef(holdRef);
+  removeRef(target);
+  const pts=awardScoringAction();
+  commitLog(
+    'MATCH_HOLD',
+    `Shortcut matched Hold (${sourceEmoji}) with ${targetLabel}; +${pts} points.`,
+    {
+      holdTileId:sourceId,
+      otherTileId:targetId,
+      otherZone:target.zone,
+      holdEmoji:sourceEmoji,
+      otherEmoji:targetEmoji,
+      pointsAwarded:pts,
+      h:sourceId,
+      o:targetId,
+      shortcutGesture:'IMMEDIATE_EXPOSURE_HOLD_MATCH',
+      shortcutSourceZone:source.zone
+    }
+  );
+
+  finishAction(source,target);
+  return true;
+}
 function draw(){
   if(state.gameOver) return;
   if(state.stockQueue.length===0){ resetStock(); return; }
-  saveSnapshot(); const drawn=state.stockQueue.splice(0,Math.min(3,state.stockQueue.length)); state.inPlay.push(...drawn); state.streak=0;
+  saveSnapshot(); const drawn=state.stockQueue.splice(0,Math.min(3,state.stockQueue.length)); state.inPlay.push(...drawn); addInventoryDrawGroup(state,drawn); state.streak=0;
   commitLog('DRAW',`Drew ${drawn.map(id=>`${id} (${state.tileData[id]})`).join(', ')}. Streak reset.`); finishAction();
 }
 function resetStock(){
   if(!state.inPlay.length){ setStatus('No inventory tiles remain.'); return; }
-  saveSnapshot(); state.stockQueue=[...state.inPlay].sort((a,b)=>a-b); state.inPlay=[]; state.streak=0; state.resetsUsed=(state.resetsUsed||0)+1; const before=state.score; state.score=Math.max(0,state.score-50); const deduction=before-state.score;
+  saveSnapshot(); state.stockQueue=[...state.inPlay].sort((a,b)=>a-b); state.inPlay=[]; state.inventoryGroups=[]; state.streak=0; state.resetsUsed=(state.resetsUsed||0)+1; const before=state.score; state.score=Math.max(0,state.score-50); const deduction=before-state.score;
   if(deduction) flashPoints(`-${deduction}`,true); commitLog('RESET',`Reset inventory; -${deduction} points. Streak reset.`); finishAction();
 }
 function finishAction(...refs){
@@ -369,8 +512,10 @@ function sameRef(a,b){ return a&&b&&a.zone===b.zone&&String(a.tileId??'h')===Str
 function refFromElement(el){
   const tile=el?.closest?.('.tile,.holdtile'); if(!tile) return null;
   if(tile.id==='tileh') return {zone:'hold',tileId:'h'};
-  if(tile.id==='tilez') return {zone:'inventory',tileId:currentZId()};
-  if(tile.id==='tilex'||tile.id==='tiley') return {zone:'inventory',tileId:Number(tile.dataset.tileId)};
+  if(tile.id==='tilex'||tile.id==='tiley'||tile.id==='tilez'){
+    const id=Number(tile.dataset.tileId);
+    return id?{zone:'inventory',tileId:id}:null;
+  }
   return {zone:'pyramid',tileId:Number(tile.dataset.tileId)};
 }
 function renderAll(){
@@ -383,8 +528,15 @@ function renderAll(){
   const perfectMetric=document.getElementById('perfectPossible'); if(perfectMetric)perfectMetric.textContent=perfectRoutePossible(state)?'YES':'NO';
 }
 function renderInventory(){
-  const ids=currentInventoryIds(); const slots=[document.getElementById('tilez'),document.getElementById('tiley'),document.getElementById('tilex')];
-  slots.forEach((el,index)=>{ const id=ids[index]; const emoji=id?state.tileData[id]:''; el.dataset.tileId=id??''; el.classList.toggle('hidden-tile',!id); applyEmojiFace(el,emoji); });
+  const visible=visibleInventorySlots(state);
+  const slotMap={tilex:visible.x,tiley:visible.y,tilez:visible.z};
+  for(const [slotId,id] of Object.entries(slotMap)){
+    const el=document.getElementById(slotId);
+    const emoji=id?state.tileData[id]:'';
+    el.dataset.tileId=id??'';
+    el.classList.toggle('hidden-tile',!id);
+    applyEmojiFace(el,emoji);
+  }
 }
 function renderHold(){
   const el=document.getElementById('tileh'); const emoji=state.hold?.emoji||''; el.classList.toggle('occupied',!!emoji); el.querySelector('.holdtext').style.visibility=emoji?'hidden':'visible'; if(emoji) applyEmojiFace(el,emoji); else { applyEmojiFace(el,null); el.style.backgroundColor='transparent'; }
@@ -394,7 +546,7 @@ function renderLog(){ const ol=document.getElementById('moveLog'); ol.innerHTML=
 function renderSelection(){ clearHighlights(); if(!selected) return; const el=elementForRef(selected); if(el) el.classList.add('selected'); }
 function clearHighlights(){ document.querySelectorAll('.selected,.valid-target,.invalid-target').forEach(el=>el.classList.remove('selected','valid-target','invalid-target')); }
 function clearSolverHighlights(){ document.querySelectorAll('.solver-play').forEach(el=>el.classList.remove('solver-play')); }
-function elementForRef(ref){ if(ref.zone==='hold') return document.getElementById('tileh'); if(ref.zone==='inventory') return Number(ref.tileId)===currentZId()?document.getElementById('tilez'):null; return document.getElementById(`tile${ref.tileId}`); }
+function elementForRef(ref){ if(ref.zone==='hold') return document.getElementById('tileh'); if(ref.zone==='inventory') return inventoryElementForId(ref.tileId); return document.getElementById(`tile${ref.tileId}`); }
 function setStatus(text,complete=false){ const el=document.getElementById('status'); el.textContent=text; el.classList.toggle('game-over',complete); }
 function flashPoints(text,negative=false){ const el=document.getElementById('flash-points'); el.textContent=text; el.style.color=negative?'#b42318':'#238636'; clearTimeout(flashPoints.timer); flashPoints.timer=setTimeout(()=>el.textContent='',900); }
 
@@ -423,6 +575,7 @@ function bindPointerEvents(){
     const target=refAtPoint(e.clientX,e.clientY);
     if(!target||sameRef(p.ref,target)){ setStatus('Tile returned to its original position.'); return; }
     if(target.zone==='hold'&&!state.hold){ moveToHold(p.ref); return; }
+    if(canImmediateExposureShortcut(p.ref,target)){ executeImmediateExposureShortcut(p.ref,target); return; }
     matchRefs(p.ref,target);
   });
   document.addEventListener('pointercancel',()=>{ if(pointerSession?.ghost) pointerSession.ghost.remove(); pointerSession=null; clearHighlights(); });
@@ -431,14 +584,15 @@ function refAtPoint(x,y){ const el=document.elementFromPoint(x,y); return refFro
 function highlightDropTarget(x,y,source){
   clearHighlights(); const src=elementForRef(source); if(src) src.classList.add('selected'); const target=refAtPoint(x,y); if(!target||sameRef(source,target)) return;
   const el=elementForRef(target); if(!el) return;
-  const valid=(target.zone==='hold'&&!state.hold)|| (isPlayable(target)&&isPair(source,target)); el.classList.add(valid?'valid-target':'invalid-target');
+  const valid=(target.zone==='hold'&&!state.hold) || (isPlayable(target)&&isPair(source,target)) || canImmediateExposureShortcut(source,target);
+  el.classList.add(valid?'valid-target':'invalid-target');
 }
 function localTimestampForFilename(){
   const d=new Date(), pad=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 function downloadLog(){
-  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'hold-inclusive-final-count-v0.9.9',endgamePlanner:SOLVER_DEPTH_MODE==='DEEP',endgamePlannerMode:SOLVER_DEPTH_MODE==='DEEP'?'diagnostic':'skipped-standard',litpReasoning:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceValidation:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceSimulator:SOLVER_DEPTH_MODE==='DEEP',endgameReachability:SOLVER_DEPTH_MODE==='DEEP',litpLaneValidation:SOLVER_DEPTH_MODE==='DEEP',progressMetrics:true,inventoryTargetBuilder:SOLVER_DEPTH_MODE==='DEEP',inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true,holdCorridorAwareness:true,holdCorridorStandard:true,holdCorridorDeepPlanner:true,standardEndgameSkipped:SOLVER_DEPTH_MODE==='STANDARD',remainingTileBonusPerTile:50,holdCountsAsRemainingTile:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
+  const payload={version:VERSION,playerType:'SOLVER',logType:'SOLVER',savedAt:new Date().toISOString(),searchConfig:{tacticalDepth:SEARCH_DEPTH,stateLimit:SEARCH_NODE_LIMIT,tacticalBeamWidth:SEARCH_BEAM_WIDTH,planBeamWidth:PLAN_BEAM_WIDTH,planMaxDepth:PLAN_MAX_DEPTH,maxResets:MAX_SOLVER_RESETS,solveBonus:SOLVE_BONUS,timeBonus:TIME_BONUS,perfectScore:PERFECT_SCORE,perfectProbeBeamWidth:PERFECT_PROBE_BEAM_WIDTH,perfectProbeStateLimit:PERFECT_PROBE_NODE_LIMIT,strategy:'real-game-mechanics-v0.10.0',endgamePlanner:SOLVER_DEPTH_MODE==='DEEP',endgamePlannerMode:SOLVER_DEPTH_MODE==='DEEP'?'diagnostic':'skipped-standard',litpReasoning:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceValidation:SOLVER_DEPTH_MODE==='DEEP',endgameSequenceSimulator:SOLVER_DEPTH_MODE==='DEEP',endgameReachability:SOLVER_DEPTH_MODE==='DEEP',litpLaneValidation:SOLVER_DEPTH_MODE==='DEEP',progressMetrics:true,inventoryTargetBuilder:SOLVER_DEPTH_MODE==='DEEP',inventoryWave:true,postResetProjection:true,microStreakSetup:true,roadblockRepairSeeds:true,holdCorridorAwareness:true,holdCorridorStandard:true,holdCorridorDeepPlanner:true,standardEndgameSkipped:SOLVER_DEPTH_MODE==='STANDARD',remainingTileBonusPerTile:50,holdCountsAsRemainingTile:true,inventorySlotsPreserveDrawPosition:true,immediateExposureHoldShortcut:true},solverSessionStats,teacher:{mode:solverMode,hints:solverHints,comparison:solverEndgameAnalysis?.candidates?.[0]?compareHints(solverEndgameAnalysis.candidates[0]):null},solveMode:(memoryUseMode==='REPLAY'&&solverPlanResult?.memoryReplay)?'DEMO_REPLAY':'INDEPENDENT',
 demoMovesUsed:(solverPlanResult?.memoryReplay?solverPlan.length:0),
 solverDepthMode:SOLVER_DEPTH_MODE,
 learnedStrategyUse:{
@@ -605,8 +759,8 @@ det.textContent=lines.join('\n')}
 let executingPlannedAction=false;
 
 function simClone(s){ return JSON.parse(JSON.stringify(s)); }
-function simCurrentInventoryIds(s){ return [...s.inPlay].sort((a,b)=>b-a).slice(0,3); }
-function simCurrentZId(s){ return simCurrentInventoryIds(s)[0]??null; }
+function simCurrentInventoryIds(s){ return currentInventoryIds(s); }
+function simCurrentZId(s){ return currentZId(s); }
 function simEmojiOf(s,ref){
   if(ref.zone==='hold') return s.hold?.emoji||null;
   return s.tileData[ref.tileId]||null;
@@ -622,7 +776,11 @@ function simPair(s,a,b){ const x=simEmojiOf(s,a),y=simEmojiOf(s,b); return !!x&&
 function simRemove(s,ref){
   if(ref.zone==='hold'){ s.hold=null; return; }
   const id=Number(ref.tileId); s.tileData[id]=null;
-  if(id>=29){ const i=s.inPlay.indexOf(id); if(i>=0)s.inPlay.splice(i,1); const q=s.stockQueue.indexOf(id); if(q>=0)s.stockQueue.splice(q,1); }
+  if(id>=29){
+    const i=s.inPlay.indexOf(id); if(i>=0)s.inPlay.splice(i,1);
+    const q=s.stockQueue.indexOf(id); if(q>=0)s.stockQueue.splice(q,1);
+    clearInventorySlotForId(s,id);
+  }
 }
 function simAward(s){ s.streak++; s.score+=Math.min(s.streak,5)*50; }
 function simComplete(s){
@@ -674,9 +832,9 @@ function simApplyAction(s,action){
     if(UNMATCHED.has(emoji)) return null; // Unmatched tiles clear directly; they are not Hold candidates.
     simRemove(n,action.a); n.hold={emoji,sourceId:id,sourceZone:action.a.zone}; if(Number(id)===1)simComplete(n);
   }else if(action.type==='DRAW'){
-    const drawn=n.stockQueue.splice(0,Math.min(3,n.stockQueue.length)); n.inPlay.push(...drawn); n.streak=0;
+    const drawn=n.stockQueue.splice(0,Math.min(3,n.stockQueue.length)); n.inPlay.push(...drawn); addInventoryDrawGroup(n,drawn); n.streak=0;
   }else if(action.type==='RESET'){
-    n.stockQueue=[...n.inPlay].sort((a,b)=>a-b); n.inPlay=[]; n.streak=0; n.score=Math.max(0,n.score-50); n.resetsUsed=(n.resetsUsed||0)+1;
+    n.stockQueue=[...n.inPlay].sort((a,b)=>a-b); n.inPlay=[]; n.inventoryGroups=[]; n.streak=0; n.score=Math.max(0,n.score-50); n.resetsUsed=(n.resetsUsed||0)+1;
   }
   return n;
 }
