@@ -173,230 +173,105 @@
   }
 
   function makeIntegralFromBinary(mat) {
-    const width = mat.cols, height = mat.rows, stride = width + 1;
-    const integral = new Uint32Array((width + 1) * (height + 1));
-    for (let y = 0; y < height; y += 1) {
-      const row = mat.ucharPtr(y);
-      let running = 0;
-      const out = (y + 1) * stride;
-      const prev = y * stride;
-      for (let x = 0; x < width; x += 1) {
-        running += row[x] ? 1 : 0;
-        integral[out + x + 1] = integral[prev + x + 1] + running;
+    const width=mat.cols,height=mat.rows,stride=width+1;
+    const integral=new Uint32Array((width+1)*(height+1));
+    for(let y=0;y<height;y+=1){
+      const row=mat.ucharPtr(y); let running=0;
+      const out=(y+1)*stride,prev=y*stride;
+      for(let x=0;x<width;x+=1){
+        running+=row[x]?1:0;
+        integral[out+x+1]=integral[prev+x+1]+running;
       }
     }
-    return { data: integral, width, height, stride };
+    return {data:integral,width,height,stride};
   }
 
-  function rectSum(ii, x0, y0, x1, y1) {
-    x0 = Math.max(0, Math.min(ii.width, Math.round(x0)));
-    x1 = Math.max(0, Math.min(ii.width, Math.round(x1)));
-    y0 = Math.max(0, Math.min(ii.height, Math.round(y0)));
-    y1 = Math.max(0, Math.min(ii.height, Math.round(y1)));
-    if (x1 <= x0 || y1 <= y0) return 0;
-    const a = ii.data[y0 * ii.stride + x0];
-    const b = ii.data[y0 * ii.stride + x1];
-    const c = ii.data[y1 * ii.stride + x0];
-    const d = ii.data[y1 * ii.stride + x1];
-    return d - b - c + a;
+  function rectSum(ii,x0,y0,x1,y1){
+    x0=Math.max(0,Math.min(ii.width,Math.round(x0))); x1=Math.max(0,Math.min(ii.width,Math.round(x1)));
+    y0=Math.max(0,Math.min(ii.height,Math.round(y0))); y1=Math.max(0,Math.min(ii.height,Math.round(y1)));
+    if(x1<=x0||y1<=y0)return 0;
+    const a=ii.data[y0*ii.stride+x0],b=ii.data[y0*ii.stride+x1],c=ii.data[y1*ii.stride+x0],d=ii.data[y1*ii.stride+x1];
+    return d-b-c+a;
+  }
+  function rectRatio(ii,x0,y0,x1,y1){
+    const w=Math.max(1,Math.round(x1)-Math.round(x0)),h=Math.max(1,Math.round(y1)-Math.round(y0));
+    return rectSum(ii,x0,y0,x1,y1)/(w*h);
   }
 
-  function rectRatio(ii, x0, y0, x1, y1) {
-    const w = Math.max(1, Math.round(x1) - Math.round(x0));
-    const h = Math.max(1, Math.round(y1) - Math.round(y0));
-    return rectSum(ii, x0, y0, x1, y1) / (w * h);
+  function pyramidCanonicalPoints(){
+    const pts=[]; let tileId=1;
+    for(let row=1;row<=7;row+=1){
+      const y=-(7-row);
+      for(let col=1;col<=row;col+=1){pts.push({tileId,row,col,x:col-(row+1)/2,y});tileId+=1;}
+    }
+    return pts;
+  }
+  const PYRAMID_CANONICAL=pyramidCanonicalPoints();
+
+  function transformCanonicalPoint(p,q){
+    const rowT=(p.row-1)/6;
+    const rowScale=q.topScale+(1-q.topScale)*rowT;
+    const lx=p.x*q.pitch*rowScale,ly=p.y*q.pitch*q.vFactor;
+    const sx=lx+q.shear*ly,ca=Math.cos(q.angle),sa=Math.sin(q.angle);
+    return {x:q.centerX+sx*ca-ly*sa,y:q.bottomY+sx*sa+ly*ca};
+  }
+  function buildRegisteredTemplate(q){
+    const centers=PYRAMID_CANONICAL.map(p=>{const t=transformCanonicalPoint(p,q);return {...p,x:t.x,y:t.y,r:q.pitch*0.39,inferred:false};});
+    return {...q,centers};
+  }
+  function edgePatch(ii,x,y,half){return rectRatio(ii,x-half,y-half,x+half+1,y+half+1);}
+  function scoreRingSupport(ii,c,pitch){
+    const patch=Math.max(1.5,pitch*0.05),radii=[pitch*0.31,pitch*0.39,pitch*0.47];
+    const angles=[0,Math.PI/6,Math.PI/3,Math.PI/2,2*Math.PI/3,5*Math.PI/6,Math.PI,7*Math.PI/6,4*Math.PI/3,3*Math.PI/2,5*Math.PI/3,11*Math.PI/6];
+    let best=0;
+    for(const r of radii){let sum=0;for(const a of angles)sum+=edgePatch(ii,c.x+Math.cos(a)*r,c.y+Math.sin(a)*r,patch);best=Math.max(best,sum/angles.length);}
+    const busy=rectRatio(ii,c.x-pitch*0.24,c.y-pitch*0.24,c.x+pitch*0.24,c.y+pitch*0.24);
+    return best*0.82+busy*0.18;
+  }
+  function buildOuterSilhouetteSegments(t){
+    const rows=[];for(let r=1;r<=7;r++)rows[r]=t.centers.filter(c=>c.row===r).sort((a,b)=>a.x-b.x);
+    const pts=[rows[1][0]];for(let r=2;r<=7;r++)pts.push(rows[r][0]);for(let i=1;i<rows[7].length;i++)pts.push(rows[7][i]);for(let r=6;r>=2;r--)pts.push(rows[r][rows[r].length-1]);pts.push(rows[1][0]);
+    const seg=[];for(let i=0;i<pts.length-1;i++)seg.push([pts[i],pts[i+1]]);return seg;
+  }
+  function scoreSegment(ii,a,b,half,samples=14){let sum=0;for(let i=0;i<samples;i++){const t=samples===1?.5:i/(samples-1);sum+=edgePatch(ii,a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,half);}return sum/samples;}
+  function scoreRegisteredTemplate(ii,t){
+    const supports=t.centers.map(c=>scoreRingSupport(ii,c,t.pitch));
+    const ringMean=supports.reduce((a,b)=>a+b,0)/28,sorted=[...supports].sort((a,b)=>a-b),low=sorted.slice(0,7).reduce((a,b)=>a+b,0)/7;
+    const bottom=supports.slice(21,28).reduce((a,b)=>a+b,0)/7,apex=supports[0];
+    const segments=buildOuterSilhouetteSegments(t),half=Math.max(1.5,t.pitch*0.045);
+    const outer=segments.reduce((s,[a,b])=>s+scoreSegment(ii,a,b,half,18),0)/segments.length;
+    return {score:ringMean*5+low*2.2+bottom*1.7+apex*.8+outer*3,ringSupports:supports,ringMean,lowQuartile:low,bottomMean:bottom,apex,outerMean:outer};
+  }
+  function templateInsideImage(t,w,h){const pad=t.pitch*.48;return t.centers.every(c=>c.x-pad>=0&&c.y-pad>=0&&c.x+pad<w&&c.y+pad<h);}
+
+  function fitPyramidRegistration(edgeMask){
+    const ii=makeIntegralFromBinary(edgeMask),w=edgeMask.cols,h=edgeMask.rows,coarse=[];let best=null;
+    function evalQ(q,store=true){const t=buildRegisteredTemplate(q);if(!templateInsideImage(t,w,h))return null;const m=scoreRegisteredTemplate(ii,t),c={template:t,metrics:m};if(store)coarse.push(c);if(!best||m.score>best.metrics.score)best=c;return c;}
+    const pmin=Math.round(w*.075),pmax=Math.round(w*.145),pstep=Math.max(4,Math.round(w*.008)),cxstep=Math.max(6,Math.round(w*.012)),bystep=Math.max(7,Math.round(h*.012));
+    for(let pitch=pmin;pitch<=pmax;pitch+=pstep)for(let centerX=Math.round(w*.32);centerX<=Math.round(w*.68);centerX+=cxstep)for(let bottomY=Math.round(h*.40);bottomY<=Math.round(h*.74);bottomY+=bystep)for(const vFactor of [.78,.84,.90,.96,1.02])for(const topScale of [.92,.96,1])for(const angle of [-.06,-.03,0,.03,.06])for(const shear of [-.06,-.03,0,.03,.06])evalQ({centerX,bottomY,pitch,vFactor,topScale,angle,shear});
+    if(!best)throw new Error('No complete pyramid registration template fit inside the image.');
+    let current=best;
+    for(const st of [{dp:6,dc:12,dy:14,dv:.05,dt:.04,da:.025,ds:.025,step:2},{dp:3,dc:6,dy:7,dv:.025,dt:.02,da:.012,ds:.012,step:1}]){
+      const g=current.template;let sb=current;
+      for(let pitch=g.pitch-st.dp;pitch<=g.pitch+st.dp;pitch+=st.step)for(let cx=g.centerX-st.dc;cx<=g.centerX+st.dc;cx+=st.step)for(let by=g.bottomY-st.dy;by<=g.bottomY+st.dy;by+=st.step)for(let vf=g.vFactor-st.dv;vf<=g.vFactor+st.dv+1e-9;vf+=st.dv/2)for(let ts=g.topScale-st.dt;ts<=g.topScale+st.dt+1e-9;ts+=st.dt/2)for(let a=g.angle-st.da;a<=g.angle+st.da+1e-9;a+=st.da/2)for(let sh=g.shear-st.ds;sh<=g.shear+st.ds+1e-9;sh+=st.ds/2){const t=buildRegisteredTemplate({centerX:cx,bottomY:by,pitch,vFactor:vf,topScale:ts,angle:a,shear:sh});if(!templateInsideImage(t,w,h))continue;const m=scoreRegisteredTemplate(ii,t);if(m.score>sb.metrics.score)sb={template:t,metrics:m};}
+      current=sb;
+    }
+    best=current;
+    const alternatives=coarse.filter(c=>{const a=c.template,b=best.template;return Math.abs(a.centerX-b.centerX)>b.pitch*.55||Math.abs(a.bottomY-b.bottomY)>b.pitch*.55||Math.abs(a.pitch-b.pitch)>b.pitch*.16||Math.abs(a.angle-b.angle)>.045;}).sort((a,b)=>b.metrics.score-a.metrics.score);
+    const second=alternatives[0]||null,margin=second?best.metrics.score-second.metrics.score:best.metrics.score,norm=margin/Math.max(.0001,best.metrics.score);
+    const sup=best.metrics.ringSupports,thr=Math.max(.016,best.metrics.ringMean*.43);
+    const centers=best.template.centers.map((c,i)=>({...c,inferred:sup[i]<thr,templateSupport:sup[i]}));
+    const supportedCount=centers.filter(c=>!c.inferred).length,bottomSupported=centers.filter(c=>c.row===7&&!c.inferred).length,apexSupported=!centers[0].inferred;
+    const rowDiagnostics=[];for(let row=1;row<=7;row++){const rr=centers.filter(c=>c.row===row);rowDiagnostics.push({row,supported:rr.filter(c=>!c.inferred).length,expected:row});}
+    let quality='bad',locked=false;
+    if(supportedCount>=25&&bottomSupported>=6&&apexSupported&&best.metrics.outerMean>=best.metrics.ringMean*.38&&norm>=.02){quality='good';locked=true;}else if(supportedCount>=22&&bottomSupported>=5&&apexSupported)quality='warn';
+    return {ok:true,locked,quality,centers,supportedCount,bottomSupported,apexSupported,rowDiagnostics,detector:'full-pyramid-template-registration',registrationScore:best.metrics.score,outerMean:best.metrics.outerMean,ringMean:best.metrics.ringMean,normalizedMargin:norm,transform:{centerX:best.template.centerX,bottomY:best.template.bottomY,pitch:best.template.pitch,vFactor:best.template.vFactor,topScale:best.template.topScale,angle:best.template.angle,shear:best.template.shear}};
   }
 
-  function pyramidTemplateGeometry(centerX, bottomY, pitch, vFactor, topScale) {
-    const centers = [];
-    let tileId = 1;
-    for (let row = 1; row <= 7; row += 1) {
-      const t = (row - 1) / 6;
-      const rowPitch = pitch * (topScale + (1 - topScale) * t);
-      const y = bottomY - (7 - row) * pitch * vFactor;
-      for (let col = 1; col <= row; col += 1) {
-        centers.push({
-          tileId, row, col,
-          x: centerX + (col - (row + 1) / 2) * rowPitch,
-          y,
-          r: pitch * 0.39,
-          inferred: false
-        });
-        tileId += 1;
-      }
-    }
-    return { centerX, bottomY, pitch, vFactor, topScale, centers };
-  }
-
-  function edgePatch(ii, x, y, half) {
-    return rectRatio(ii, x - half, y - half, x + half + 1, y + half + 1);
-  }
-
-  function scoreTemplateCenter(ii, c, pitch) {
-    const r = pitch * 0.39;
-    const patch = Math.max(1.5, pitch * 0.055);
-    const angles = [0,Math.PI/4,Math.PI/2,3*Math.PI/4,Math.PI,5*Math.PI/4,3*Math.PI/2,7*Math.PI/4];
-
-    let outer = 0, inner = 0;
-    for (const a of angles) {
-      outer += edgePatch(ii, c.x + Math.cos(a)*r, c.y + Math.sin(a)*r, patch);
-      inner += edgePatch(ii, c.x + Math.cos(a)*r*0.78, c.y + Math.sin(a)*r*0.78, patch);
-    }
-    outer /= angles.length;
-    inner /= angles.length;
-
-    const centerBusy = rectRatio(ii, c.x-r*0.5, c.y-r*0.5, c.x+r*0.5, c.y+r*0.5);
-    const score = outer*0.58 + inner*0.30 + centerBusy*0.12;
-    return { score, outer, inner, centerBusy };
-  }
-
-  function scorePyramidTemplate(ii, g) {
-    const supports = g.centers.map(c => ({...c, ...scoreTemplateCenter(ii,c,g.pitch)}));
-    const mean = supports.reduce((s,c)=>s+c.score,0)/28;
-    const bottom = supports.filter(c=>c.row===7);
-    const bottomMean = bottom.reduce((s,c)=>s+c.score,0)/7;
-    const apex = supports[0].score;
-    const sorted = supports.map(c=>c.score).sort((a,b)=>a-b);
-    const lowQuartile = sorted.slice(0,7).reduce((a,b)=>a+b,0)/7;
-    return {
-      score: mean*5.5 + bottomMean*2.2 + apex*0.9 + lowQuartile*2.4,
-      mean, bottomMean, apex, lowQuartile, supports
-    };
-  }
-
-  function fitFixedPyramidTemplate(edgeMask) {
-    const ii = makeIntegralFromBinary(edgeMask);
-    const w = edgeMask.cols, h = edgeMask.rows;
-    let best = null;
-    const coarse = [];
-
-    function consider(centerX,bottomY,pitch,vFactor,topScale) {
-      const g = pyramidTemplateGeometry(centerX,bottomY,pitch,vFactor,topScale);
-      const left = Math.min(...g.centers.map(c=>c.x-c.r));
-      const right = Math.max(...g.centers.map(c=>c.x+c.r));
-      const top = Math.min(...g.centers.map(c=>c.y-c.r));
-      const bottom = Math.max(...g.centers.map(c=>c.y+c.r));
-      if (left<0 || top<0 || right>=w || bottom>=h) return;
-      const metrics = scorePyramidTemplate(ii,g);
-      const c = {geometry:g,metrics};
-      coarse.push(c);
-      if (!best || metrics.score > best.metrics.score) best = c;
-    }
-
-    const minPitch = Math.round(w*0.075), maxPitch = Math.round(w*0.145);
-    const pitchStep = Math.max(4,Math.round(w*0.007));
-    const centerStep = Math.max(5,Math.round(w*0.010));
-    const bottomStep = Math.max(6,Math.round(h*0.010));
-
-    for (let pitch=minPitch; pitch<=maxPitch; pitch+=pitchStep) {
-      for (let cx=Math.round(w*0.34); cx<=Math.round(w*0.66); cx+=centerStep) {
-        for (let by=Math.round(h*0.38); by<=Math.round(h*0.72); by+=bottomStep) {
-          for (const vf of [0.76,0.80,0.84,0.88,0.92,0.96]) {
-            for (const ts of [0.92,0.96,1.00]) consider(cx,by,pitch,vf,ts);
-          }
-        }
-      }
-    }
-    if (!best) throw new Error("No fixed pyramid-template candidate fit inside the image.");
-
-    const b = best.geometry;
-    let fineBest = best;
-    for (let pitch=b.pitch-6; pitch<=b.pitch+6; pitch+=2) {
-      for (let cx=b.centerX-10; cx<=b.centerX+10; cx+=2) {
-        for (let by=b.bottomY-12; by<=b.bottomY+12; by+=2) {
-          for (let vf=b.vFactor-0.04; vf<=b.vFactor+0.04; vf+=0.01) {
-            for (let ts=b.topScale-0.03; ts<=b.topScale+0.03; ts+=0.01) {
-              const g = pyramidTemplateGeometry(cx,by,pitch,vf,ts);
-              const left = Math.min(...g.centers.map(c=>c.x-c.r));
-              const right = Math.max(...g.centers.map(c=>c.x+c.r));
-              const top = Math.min(...g.centers.map(c=>c.y-c.r));
-              const bottom = Math.max(...g.centers.map(c=>c.y+c.r));
-              if (left<0 || top<0 || right>=w || bottom>=h) continue;
-              const metrics = scorePyramidTemplate(ii,g);
-              if (metrics.score > fineBest.metrics.score) fineBest = {geometry:g,metrics};
-            }
-          }
-        }
-      }
-    }
-
-    const alternatives = coarse.filter(c=>{
-      const a=c.geometry,g=fineBest.geometry;
-      return Math.abs(a.centerX-g.centerX)>g.pitch*0.55 ||
-             Math.abs(a.bottomY-g.bottomY)>g.pitch*0.55 ||
-             Math.abs(a.pitch-g.pitch)>g.pitch*0.15;
-    }).sort((a,b)=>b.metrics.score-a.metrics.score);
-
-    const second = alternatives[0] || null;
-    const margin = second ? fineBest.metrics.score-second.metrics.score : fineBest.metrics.score;
-    const normalizedMargin = margin/Math.max(0.0001,fineBest.metrics.score);
-    const supportThreshold = Math.max(0.018,fineBest.metrics.mean*0.42);
-
-    const centers = fineBest.metrics.supports.map(s=>({
-      tileId:s.tileId,row:s.row,col:s.col,x:s.x,y:s.y,r:s.r,
-      inferred:s.score<supportThreshold,
-      templateSupport:s.score
-    }));
-    const supportedCount = centers.filter(c=>!c.inferred).length;
-    const bottomSupported = centers.filter(c=>c.row===7&&!c.inferred).length;
-    const apexSupported = !centers[0].inferred;
-
-    const rowDiagnostics = [];
-    for (let row=1; row<=7; row+=1) {
-      const rr=centers.filter(c=>c.row===row);
-      rowDiagnostics.push({row,supported:rr.filter(c=>!c.inferred).length,expected:row});
-    }
-
-    let quality="bad", locked=false;
-    if (supportedCount>=24 && bottomSupported>=6 && apexSupported && normalizedMargin>=0.02) {
-      quality="good"; locked=true;
-    } else if (supportedCount>=21 && bottomSupported>=5 && apexSupported) {
-      quality="warn";
-    }
-
-    return {
-      ok:true,locked,quality,centers,supportedCount,bottomSupported,apexSupported,rowDiagnostics,
-      detector:"fixed-28-position-pyramid-template",
-      templateScore:fineBest.metrics.score,
-      secondScore:second?second.metrics.score:null,
-      normalizedMargin,
-      workGeometry:fineBest.geometry
-    };
-  }
-
-  function detectCirclesWithOpenCv() {
-    if (!cvReady || !window.cv) throw new Error("OpenCV is not ready.");
-    restoreOriginalCapture();
-
-    let src=null, small=null, gray=null, blurred=null, edges=null;
-    try {
-      const cv=window.cv;
-      src=cv.imread(canvas);
-      const targetWidth=Math.min(640,src.cols);
-      const scale=targetWidth/src.cols;
-      const targetHeight=Math.max(1,Math.round(src.rows*scale));
-
-      small=new cv.Mat();
-      cv.resize(src,small,new cv.Size(targetWidth,targetHeight),0,0,cv.INTER_AREA);
-
-      gray=new cv.Mat();
-      cv.cvtColor(small,gray,cv.COLOR_RGBA2GRAY);
-
-      blurred=new cv.Mat();
-      cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);
-
-      edges=new cv.Mat();
-      cv.Canny(blurred,edges,42,126);
-
-      const result=fitFixedPyramidTemplate(edges);
-      result.scaleToCanvasX=canvas.width/targetWidth;
-      result.scaleToCanvasY=canvas.height/targetHeight;
-      result.workWidth=targetWidth;
-      result.workHeight=targetHeight;
-      return result;
-    } finally {
-      if(edges)edges.delete(); if(blurred)blurred.delete(); if(gray)gray.delete(); if(small)small.delete(); if(src)src.delete();
-    }
+  function detectCirclesWithOpenCv(){
+    if(!cvReady||!window.cv)throw new Error('OpenCV is not ready.');restoreOriginalCapture();
+    let src=null,small=null,gray=null,blurred=null,edges=null;
+    try{const cv=window.cv;src=cv.imread(canvas);const targetWidth=Math.min(640,src.cols),scale=targetWidth/src.cols,targetHeight=Math.max(1,Math.round(src.rows*scale));small=new cv.Mat();cv.resize(src,small,new cv.Size(targetWidth,targetHeight),0,0,cv.INTER_AREA);gray=new cv.Mat();cv.cvtColor(small,gray,cv.COLOR_RGBA2GRAY);blurred=new cv.Mat();cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);edges=new cv.Mat();cv.Canny(blurred,edges,42,126);const result=fitPyramidRegistration(edges);result.scaleToCanvasX=canvas.width/targetWidth;result.scaleToCanvasY=canvas.height/targetHeight;result.workWidth=targetWidth;result.workHeight=targetHeight;return result;}finally{if(edges)edges.delete();if(blurred)blurred.delete();if(gray)gray.delete();if(small)small.delete();if(src)src.delete();}
   }
 
   function drawGeometryOverlay(geometry) {
@@ -434,24 +309,12 @@
   }
 
   function geometryHtml(g) {
-    if (!g.ok) return `<strong>Pyramid-template fit failed.</strong><br>${g.reason || "No template fit."}`;
+    if(!g.ok)return `<strong>Pyramid registration failed.</strong><br>${g.reason||"No registration fit."}`;
     const chips=g.rowDiagnostics.map(r=>`<div class="geometry-chip">Row ${r.row}: ${r.supported}/${r.expected}</div>`).join("");
     const marginPct=Math.round((g.normalizedMargin||0)*1000)/10;
-    if (g.locked) {
-      return `<strong>28-position pyramid template LOCKED.</strong><br>
-        ${g.supportedCount}/28 strongly supported; bottom ${g.bottomSupported}/7; apex supported.<br>
-        Best-vs-second template separation: ${marginPct}%.
-        <div class="geometry-grid">${chips}</div>`;
-    }
-    if (g.quality==="warn") {
-      return `<strong>Template fit found — CHECK ALIGNMENT.</strong><br>
-        ${g.supportedCount}/28 strongly supported; bottom ${g.bottomSupported}/7; apex ${g.apexSupported?"supported":"weak"}.<br>
-        The 28 legal positions come from the fixed template, but confidence is not high enough to continue automatically.
-        <div class="geometry-grid">${chips}</div>`;
-    }
-    return `<strong>Template fit uncertain — RETAKE / RETRY.</strong><br>
-      ${g.supportedCount}/28 strongly supported; bottom ${g.bottomSupported}/7; apex ${g.apexSupported?"supported":"weak"}.
-      <div class="geometry-grid">${chips}</div>`;
+    if(g.locked)return `<strong>FULL PYRAMID TEMPLATE LOCKED.</strong><br>${g.supportedCount}/28 emoji-circle positions strongly supported; bottom ${g.bottomSupported}/7; apex supported.<br>Outer silhouette and all 28 circles were scored together. Best-vs-second registration separation: ${marginPct}%.<div class="geometry-grid">${chips}</div>`;
+    if(g.quality==="warn")return `<strong>Registration found — CHECK ALIGNMENT.</strong><br>${g.supportedCount}/28 circle positions supported; bottom ${g.bottomSupported}/7; apex ${g.apexSupported?"supported":"weak"}.<br>The fixed 28-circle pyramid mask is placed, but confidence is not high enough to continue automatically.<div class="geometry-grid">${chips}</div>`;
+    return `<strong>Registration uncertain — RETAKE / RETRY.</strong><br>${g.supportedCount}/28 circle positions supported; bottom ${g.bottomSupported}/7; apex ${g.apexSupported?"supported":"weak"}.<div class="geometry-grid">${chips}</div>`;
   }
 
   function detectGeometry() {
@@ -466,7 +329,7 @@
 
     detectButton.disabled = true;
     keepButton.disabled = true;
-    setGeometrySummary("Fitting the canonical 28-position pyramid template over the photographed board…", "");
+    setGeometrySummary("Registering the full pyramid mask: outer silhouette + all 28 expected emoji circles…", "");
 
     // Yield once so Safari paints the status before the heavier OpenCV work.
     window.setTimeout(() => {
@@ -555,7 +418,7 @@
       return;
     }
     cvReady = true;
-    setCvStatus("OpenCV ready — FreeCell-style fixed-template matcher available.", "ready");
+    setCvStatus("OpenCV ready — full-pyramid template registration available.", "ready");
   }
 
   function markCvError(message) {
