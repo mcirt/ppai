@@ -7,17 +7,48 @@
 <style>
 :root{--tile-width:40px;--tile-height:60px;--tile-overlap:-30px;--tile-bg:#f5f2d8;--accent:#2f80ed}
 *{box-sizing:border-box}body{margin:0;padding:16px 8px 28px;font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111;text-align:center}h1{margin:0 0 6px;font-size:clamp(26px,7vw,42px)}.version{margin-bottom:8px;color:#666}.file-status{min-height:22px;color:#444;font-size:13px;margin-bottom:8px}#pyramid{width:max-content;max-width:100%;margin:0 auto;padding-top:30px}.pyramid-row{display:flex;justify-content:center;margin:var(--tile-overlap) 0 0}.tile{position:relative;width:var(--tile-width);height:var(--tile-height);flex:0 0 var(--tile-width);background:var(--tile-bg);border-radius:10px;box-shadow:2px 2px 5px rgba(0,0,0,.3);background-repeat:no-repeat;background-position:center 7px;background-size:30px 30px;cursor:pointer;outline:3px solid transparent;outline-offset:-2px}.tile.selected{outline-color:var(--accent)}.inventory-wrap{width:100%;overflow-x:auto;margin-top:20px;padding-bottom:4px}.inventory{display:flex;justify-content:center;min-width:calc(24 * var(--tile-width));width:max-content;margin:0 auto}.inventory .tile:nth-child(3n){border-right:2px solid #111}.section-label{margin:18px 0 8px;font-size:18px;font-weight:700}.emoji-keyboard{display:grid;grid-template-columns:repeat(6,54px);gap:7px;justify-content:center}.emoji-key{width:54px;height:54px;border:0;border-radius:9px;background:#f5f2d8 center/38px 38px no-repeat;box-shadow:1px 2px 5px rgba(0,0,0,.28);cursor:pointer;touch-action:manipulation}.emoji-key:active,.emoji-key.active{transform:translateY(1px);outline:3px solid var(--accent)}.status{min-height:24px;margin:12px 0 0;color:#444;font-size:15px}.button-grid{display:grid;grid-template-columns:repeat(2,minmax(140px,180px));gap:10px;justify-content:center;margin-top:14px}.action-button{border:0;border-radius:7px;padding:11px 12px;color:#fff;background:#666;font-size:16px;font-weight:700;cursor:pointer}#playButton{background:#228b22}#solveButton{background:#1677b8}#clearButton{background:#aa2b2b}.panel{max-width:760px;margin:18px auto 0;border:1px solid #ccc;border-radius:10px;padding:12px;background:#fafafa;text-align:left}.panel h2{font-size:18px;margin:0 0 8px}.mode-row{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;margin:8px 0}.mode-btn{border:1px solid #aaa;background:#fff;border-radius:7px;padding:8px 12px;font-weight:700;cursor:pointer}.mode-btn.active{background:#1677b8;color:#fff;border-color:#1677b8}.hint-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.hint{display:flex;align-items:center;gap:5px;border:1px solid #ddd;border-radius:7px;padding:6px;background:#fff}.hint.armed{outline:2px solid var(--accent)}.hint input{width:48px;text-align:center}.hint button{margin-left:auto}.hint-note,.memory-note{font-size:12px;color:#555;margin-top:7px}.memory-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.memory-row button,.memory-row select{padding:8px 10px;border-radius:7px;border:1px solid #aaa;background:#fff;font-weight:700}.memory-count{text-align:center;margin-top:8px;font-size:13px}.demo-list{font-size:12px;max-height:140px;overflow:auto;margin-top:8px}.demo-item{border-top:1px solid #ddd;padding:6px 0}.hidden{display:none!important}@media(max-width:470px){.emoji-keyboard{grid-template-columns:repeat(6,44px);gap:5px}.emoji-key{width:44px;height:48px;background-size:32px 32px}.button-grid{grid-template-columns:repeat(2,minmax(130px,1fr));padding:0 8px}.hint-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- v0.10.2 camera / OpenCV foundation ---------- */
+.scan-panel{max-width:760px;margin:14px auto 0;border:1px solid #b9c2cc;border-radius:10px;padding:12px;background:#f7fbff;text-align:center}
+.scan-panel h2{margin:0 0 6px;font-size:18px}.scan-panel p{margin:5px 0;color:#555;font-size:13px;line-height:1.35}
+.scan-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:9px}
+.scan-button{border:0;border-radius:7px;padding:10px 14px;font-size:15px;font-weight:700;cursor:pointer;background:#1769aa;color:#fff}
+.scan-button.secondary{background:#666}.scan-button:disabled{opacity:.45;cursor:default}
+.opencv-status{margin-top:8px;font-size:12px;font-weight:700;color:#555}
+.opencv-status.ready{color:#238636}.opencv-status.error{color:#b42318}.opencv-status.working{color:#1769aa}
+.scan-dialog{position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:10px}
+.scan-dialog[hidden]{display:none}
+.scan-card{width:min(760px,100%);max-height:96vh;overflow:auto;background:#fff;border-radius:12px;padding:12px;box-shadow:0 12px 38px rgba(0,0,0,.45)}
+.scan-card h2{margin:0 0 6px}.scan-camera-wrap{position:relative;margin:8px auto 0;max-width:620px;background:#000;border-radius:10px;overflow:hidden}
+#ppaiScanVideo{display:block;width:100%;height:auto;max-height:68vh;object-fit:contain;background:#000}
+.scan-guide{position:absolute;left:7%;right:7%;top:8%;bottom:8%;border:2px dashed rgba(255,255,255,.8);border-radius:12px;pointer-events:none}
+.scan-guide::before{content:'Keep the full 28-tile pyramid inside this area';position:absolute;left:50%;top:5px;transform:translateX(-50%);width:max-content;max-width:90%;padding:4px 7px;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;font-size:11px}
+.scan-preview-wrap{margin:10px auto 0;max-width:620px}.scan-preview-wrap canvas{max-width:100%;height:auto;border:1px solid #bbb;border-radius:8px;background:#111}
+.scan-status{min-height:22px;margin-top:7px;font-size:13px;color:#444}.scan-status.error{color:#b42318}.scan-status.ready{color:#238636}
+.scan-proof{margin-top:7px;font-size:12px;color:#555}
+@media(max-width:520px){.scan-card{padding:9px}.scan-guide{left:4%;right:4%;top:5%;bottom:5%}.scan-button{flex:1 1 130px}}
+
 </style>
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.9.2 — Hold Corridor / Bridge Awareness</div>
+<div class="version">PPAI JS v0.10.2 — Camera / OpenCV Foundation</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
 <div class="section-label">Emoji Keyboard</div>
 <div class="emoji-keyboard" id="emojiKeyboard"></div>
 <div id="status" class="status">Next input: Tile 1 of 52</div>
+
+<div class="scan-panel">
+  <h2>Camera Input</h2>
+  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.10.2 is the camera/OpenCV foundation milestone; it captures the pyramid photo but does not recognize tiles yet.</p>
+  <div class="scan-row">
+    <button id="scanPyramidButton" class="scan-button" type="button">Scan Pyramid</button>
+  </div>
+  <div id="opencvStatus" class="opencv-status working" role="status">Loading OpenCV…</div>
+</div>
+
 
 <div class="button-grid">
 <button id="deleteButton" class="action-button">Delete Last Input</button><button id="clearButton" class="action-button">Clear Board</button>
@@ -72,12 +103,39 @@
 </div>
 
 
+
+<div id="ppaiScanDialog" class="scan-dialog" hidden role="dialog" aria-modal="true" aria-label="Scan Pyramid">
+  <div class="scan-card">
+    <h2>Scan Pyramid — Camera Test</h2>
+    <div id="ppaiCameraPanel">
+      <div class="scan-camera-wrap">
+        <video id="ppaiScanVideo" playsinline muted></video>
+        <div class="scan-guide"></div>
+      </div>
+      <div id="ppaiScanStatus" class="scan-status">Camera is not running.</div>
+      <div class="scan-row">
+        <button id="ppaiCaptureButton" class="scan-button" type="button" disabled>Capture Pyramid Photo</button>
+        <button id="ppaiStopCameraButton" class="scan-button secondary" type="button">Stop Camera</button>
+        <button id="ppaiCloseScanButton" class="scan-button secondary" type="button">Close</button>
+      </div>
+    </div>
+    <div id="ppaiPreviewPanel" class="scan-preview-wrap" hidden>
+      <canvas id="ppaiCaptureCanvas"></canvas>
+      <div id="ppaiCvProof" class="scan-proof"></div>
+      <div class="scan-row">
+        <button id="ppaiRetakeButton" class="scan-button secondary" type="button">Retake</button>
+        <button id="ppaiKeepCaptureButton" class="scan-button" type="button">Keep Photo for Next Phase</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="fileInput" hidden accept=".json,application/json">
 <input type="file" id="demoFileInput" hidden accept=".json,application/json">
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.9.2'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.10.2'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
@@ -140,4 +198,9 @@ makeBoard();makeKeyboard();setMode(solverMode);setDepthMode(solverDepthMode);
 document.querySelectorAll('.depth-btn').forEach(b=>b.addEventListener('click',()=>setDepthMode(b.dataset.depth)));
 refreshHints();renderDemoLibrary();setFileStatus();document.getElementById('memoryUseMode').value=localStorage.getItem('ppaiMemoryUseMode')||'INDEPENDENT';document.getElementById('memoryUseMode').addEventListener('change',e=>localStorage.setItem('ppaiMemoryUseMode',e.target.value));updateStatus();
 </script>
+
+<script src="js/opencv.js?v=1"></script>
+<script src="js/opencv-loader.js?v=1"></script>
+<script src="js/ppai-scan.js?v=1"></script>
+
 </body></html>
