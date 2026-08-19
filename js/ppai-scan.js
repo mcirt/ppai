@@ -389,79 +389,150 @@
     let src = null;
     let small = null;
     let gray = null;
-    let blur = null;
-    let circlesMat = null;
+    let blurred = null;
+    let edges = null;
+    let closed = null;
+    let contours = null;
+    let hierarchy = null;
+    let kernel = null;
 
     try {
-      src = window.cv.imread(canvas);
+      const cv = window.cv;
+      src = cv.imread(canvas);
 
       const targetWidth = Math.min(760, src.cols);
       const scale = targetWidth / src.cols;
       const targetHeight = Math.max(1, Math.round(src.rows * scale));
 
-      small = new window.cv.Mat();
-      window.cv.resize(
+      small = new cv.Mat();
+      cv.resize(
         src,
         small,
-        new window.cv.Size(targetWidth, targetHeight),
+        new cv.Size(targetWidth, targetHeight),
         0,
         0,
-        window.cv.INTER_AREA
+        cv.INTER_AREA
       );
 
-      gray = new window.cv.Mat();
-      blur = new window.cv.Mat();
-      window.cv.cvtColor(small, gray, window.cv.COLOR_RGBA2GRAY);
-      window.cv.GaussianBlur(
-        gray,
-        blur,
-        new window.cv.Size(7, 7),
-        1.6,
-        1.6,
-        window.cv.BORDER_DEFAULT
+      // This is intentionally the same family of operations that the working
+      // FreeCell photo scanner already uses with this exact OpenCV build.
+      gray = new cv.Mat();
+      cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
+
+      blurred = new cv.Mat();
+      cv.GaussianBlur(gray, blurred, new cv.Size(7, 7), 0);
+
+      edges = new cv.Mat();
+      cv.Canny(blurred, edges, 45, 135);
+
+      // Close small breaks in the circular emblem outlines so findContours()
+      // sees them as compact objects instead of fragmented arcs.
+      closed = new cv.Mat();
+      kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
+      cv.morphologyEx(edges, closed, cv.MORPH_CLOSE, kernel);
+
+      contours = new cv.MatVector();
+      hierarchy = new cv.Mat();
+      cv.findContours(
+        closed,
+        contours,
+        hierarchy,
+        cv.RETR_LIST,
+        cv.CHAIN_APPROX_SIMPLE
       );
 
-      circlesMat = new window.cv.Mat();
+      const imageArea = targetWidth * targetHeight;
+      const minDim = Math.min(targetWidth, targetHeight);
 
-      const minRadius = Math.max(10, Math.round(targetWidth * 0.026));
-      const maxRadius = Math.max(minRadius + 4, Math.round(targetWidth * 0.075));
-      const minDist = Math.max(18, Math.round(targetWidth * 0.055));
-
-      window.cv.HoughCircles(
-        blur,
-        circlesMat,
-        window.cv.HOUGH_GRADIENT,
-        1.15,
-        minDist,
-        110,
-        24,
-        minRadius,
-        maxRadius
-      );
-
+      // The photographed circular emblems are typically a few percent of the
+      // working width. Keep a deliberately broad range because camera distance
+      // and perspective vary.
+      const minBox = Math.max(15, targetWidth * 0.025);
+      const maxBox = Math.max(minBox + 5, targetWidth * 0.13);
       const circles = [];
-      const data = circlesMat.data32F || [];
-      for (let i = 0; i + 2 < data.length; i += 3) {
-        const x = data[i];
-        const y = data[i + 1];
-        const r = data[i + 2];
+      const debugCandidates = [];
 
-        // Filter obvious UI/background circles.
-        if (x < targetWidth * 0.05 || x > targetWidth * 0.95) continue;
-        if (y < targetHeight * 0.10 || y > targetHeight * 0.76) continue;
+      for (let i = 0; i < contours.size(); i += 1) {
+        const contour = contours.get(i);
+        try {
+          const rect = cv.boundingRect(contour);
+          const w = rect.width;
+          const h = rect.height;
 
-        circles.push({ x, y, r });
+          if (w < minBox || h < minBox || w > maxBox || h > maxBox) continue;
+
+          const aspect = w / Math.max(1, h);
+          if (aspect < 0.66 || aspect > 1.50) continue;
+
+          // Restrict candidate search to the broad area where the pyramid
+          // appears in real camera captures. This removes most UI controls.
+          const cx = rect.x + w / 2;
+          const cy = rect.y + h / 2;
+          if (cx < targetWidth * 0.07 || cx > targetWidth * 0.93) continue;
+          if (cy < targetHeight * 0.10 || cy > targetHeight * 0.78) continue;
+
+          const area = Math.abs(cv.contourArea(contour));
+          const boxArea = w * h;
+          if (boxArea <= 0) continue;
+
+          // Circular/ring contours do not always fill the rectangle, especially
+          // after Canny, so use a forgiving fill range.
+          const fill = area / boxArea;
+          if (fill < 0.10 || fill > 0.92) continue;
+
+          const perimeter = cv.arcLength(contour, true);
+          if (perimeter <= 0) continue;
+
+          // 4*pi*A/P^2 approaches 1 for compact circles. Edge rings and partial
+          // contours score lower, so keep a loose threshold.
+          const circularity = (4 * Math.PI * area) / (perimeter * perimeter);
+          if (circularity < 0.18) continue;
+
+          const radius = (w + h) / 4;
+          circles.push({
+            x: cx,
+            y: cy,
+            r: radius,
+            aspect,
+            fill,
+            circularity
+          });
+          debugCandidates.push({ x: cx, y: cy, w, h, circularity });
+        } finally {
+          contour.delete();
+        }
       }
 
-      const geometry = fitPyramidGeometry(circles, targetWidth, targetHeight);
+      // findContours frequently returns nested contours for one emblem.
+      // Merge near-duplicate centers before fitting the seven-row lattice.
+      circles.sort((a, b) => b.circularity - a.circularity);
+      const deduped = [];
+      for (const c of circles) {
+        const duplicate = deduped.some((d) => {
+          const dx = c.x - d.x;
+          const dy = c.y - d.y;
+          const minR = Math.min(c.r, d.r);
+          return Math.hypot(dx, dy) < Math.max(8, minR * 0.70);
+        });
+        if (!duplicate) deduped.push(c);
+      }
+
+      const geometry = fitPyramidGeometry(deduped, targetWidth, targetHeight);
+      geometry.rawContourCount = contours.size();
+      geometry.rawCount = deduped.length;
       geometry.scaleToCanvasX = canvas.width / targetWidth;
       geometry.scaleToCanvasY = canvas.height / targetHeight;
       geometry.workWidth = targetWidth;
       geometry.workHeight = targetHeight;
+      geometry.detector = "Canny + MORPH_CLOSE + findContours";
       return geometry;
     } finally {
-      if (circlesMat) circlesMat.delete();
-      if (blur) blur.delete();
+      if (kernel) kernel.delete();
+      if (hierarchy) hierarchy.delete();
+      if (contours) contours.delete();
+      if (closed) closed.delete();
+      if (edges) edges.delete();
+      if (blurred) blurred.delete();
       if (gray) gray.delete();
       if (small) small.delete();
       if (src) src.delete();
@@ -517,7 +588,7 @@
     ).join("");
 
     return `<strong>28-tile pyramid geometry locked.</strong><br>
-      ${g.rawCount} circle candidates found; ${inferredText}.<br>
+      ${g.rawCount} deduplicated contour candidates found; ${inferredText}.<br>
       Green = directly supported center. Yellow = center inferred from the regular pyramid lattice.
       <div class="geometry-grid">${chips}</div>`;
   }
@@ -534,7 +605,7 @@
 
     detectButton.disabled = true;
     keepButton.disabled = true;
-    setGeometrySummary("Analyzing circle candidates and fitting seven pyramid rows…", "");
+    setGeometrySummary("Analyzing contour candidates with the FreeCell-compatible OpenCV pipeline and fitting seven pyramid rows…", "");
 
     // Yield once so Safari paints the status before the heavier OpenCV work.
     window.setTimeout(() => {
@@ -609,8 +680,23 @@
   }
 
   function markCvReady() {
+    const cv = window.cv;
+    const required = [
+      "Mat", "MatVector", "imread", "resize", "cvtColor", "GaussianBlur",
+      "Canny", "getStructuringElement", "morphologyEx", "findContours",
+      "boundingRect", "contourArea", "arcLength"
+    ];
+    const missing = required.filter((name) => typeof cv?.[name] === "undefined");
+    if (missing.length) {
+      cvReady = false;
+      setCvStatus(
+        `OpenCV loaded, but this build is missing: ${missing.join(", ")}`,
+        "error"
+      );
+      return;
+    }
     cvReady = true;
-    setCvStatus("OpenCV ready — local known-good build loaded.", "ready");
+    setCvStatus("OpenCV ready — FreeCell-compatible contour detector available.", "ready");
   }
 
   function markCvError(message) {
