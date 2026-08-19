@@ -42,7 +42,7 @@
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.10.3 — Pyramid Geometry Detection</div>
+<div class="version">PPAI JS v0.10.4 — Contour Geometry Detection</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
@@ -52,7 +52,7 @@
 
 <div class="scan-panel">
   <h2>Camera Input</h2>
-  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.10.3 captures the pyramid photo, digitally detects the pyramid geometry, and overlays numbered centers for Tiles 1–28. Emoji recognition is still the next phase.</p>
+  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.10.4 uses the same known-good OpenCV build as FreeCell and detects the pyramid with the proven Canny + morphology + findContours pipeline. Emoji recognition is still the next phase.</p>
   <div class="scan-row">
     <button id="scanPyramidButton" class="scan-button" type="button">Scan Pyramid</button>
   </div>
@@ -149,7 +149,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.10.3'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.10.4'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
