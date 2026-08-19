@@ -172,467 +172,230 @@
     }
   }
 
-  function median(values) {
-    if (!values.length) return 0;
-    const a = [...values].sort((x, y) => x - y);
-    const mid = Math.floor(a.length / 2);
-    return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
-  }
-
-  function average(values) {
-    if (!values.length) return 0;
-    return values.reduce((s, v) => s + v, 0) / values.length;
-  }
-
-  function distance(a, b) {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-
-  function rotatePoint(x, y, cx, cy, angle) {
-    const ca = Math.cos(angle);
-    const sa = Math.sin(angle);
-    const dx = x - cx;
-    const dy = y - cy;
-    return {
-      x: cx + dx * ca - dy * sa,
-      y: cy + dx * sa + dy * ca
-    };
-  }
-
-  function estimateBottomRowCandidates(circles, width, height) {
-    // Bottom pyramid row normally lives in the lower-middle region.
-    const pool = circles.filter((c) =>
-      c.y > height * 0.42 &&
-      c.y < height * 0.70 &&
-      c.x > width * 0.06 &&
-      c.x < width * 0.94
-    );
-
-    // Try every reasonably horizontal 7-candidate subset created from sorted x.
-    const sorted = [...pool].sort((a, b) => a.x - b.x);
-    const results = [];
-
-    if (sorted.length < 7) return results;
-
-    for (let i = 0; i <= sorted.length - 7; i += 1) {
-      const group = sorted.slice(i, i + 7);
-
-      const gaps = [];
-      for (let j = 1; j < group.length; j += 1) {
-        gaps.push(group[j].x - group[j - 1].x);
+  function makeIntegralFromBinary(mat) {
+    const width = mat.cols, height = mat.rows, stride = width + 1;
+    const integral = new Uint32Array((width + 1) * (height + 1));
+    for (let y = 0; y < height; y += 1) {
+      const row = mat.ucharPtr(y);
+      let running = 0;
+      const out = (y + 1) * stride;
+      const prev = y * stride;
+      for (let x = 0; x < width; x += 1) {
+        running += row[x] ? 1 : 0;
+        integral[out + x + 1] = integral[prev + x + 1] + running;
       }
-      const spacing = median(gaps);
-      if (spacing <= 0) continue;
-
-      const yMean = average(group.map((c) => c.y));
-      const ySpread = Math.max(...group.map((c) => Math.abs(c.y - yMean)));
-
-      const gapError = average(gaps.map((g) => Math.abs(g - spacing) / spacing));
-      const centerX = (group[0].x + group[6].x) / 2;
-      const centerPenalty = Math.abs(centerX - width / 2) / Math.max(1, width);
-      const widthSpan = group[6].x - group[0].x;
-      const expectedSpan = spacing * 6;
-      const spanError = Math.abs(widthSpan - expectedSpan) / Math.max(1, expectedSpan);
-
-      // Infer row tilt from first-to-last candidate.
-      const angle = Math.atan2(group[6].y - group[0].y, group[6].x - group[0].x);
-
-      const score =
-        gapError * 9 +
-        (ySpread / Math.max(1, spacing)) * 3 +
-        centerPenalty * 2 +
-        spanError * 4;
-
-      results.push({
-        group,
-        spacing,
-        centerX,
-        centerY: yMean,
-        angle,
-        score
-      });
     }
-
-    return results.sort((a, b) => a.score - b.score);
+    return { data: integral, width, height, stride };
   }
 
-  function buildIdealPyramid(bottomFit, verticalSpacingFactor = 0.88) {
-    const positions = [];
+  function rectSum(ii, x0, y0, x1, y1) {
+    x0 = Math.max(0, Math.min(ii.width, Math.round(x0)));
+    x1 = Math.max(0, Math.min(ii.width, Math.round(x1)));
+    y0 = Math.max(0, Math.min(ii.height, Math.round(y0)));
+    y1 = Math.max(0, Math.min(ii.height, Math.round(y1)));
+    if (x1 <= x0 || y1 <= y0) return 0;
+    const a = ii.data[y0 * ii.stride + x0];
+    const b = ii.data[y0 * ii.stride + x1];
+    const c = ii.data[y1 * ii.stride + x0];
+    const d = ii.data[y1 * ii.stride + x1];
+    return d - b - c + a;
+  }
 
-    const centerX = bottomFit.centerX;
-    const bottomY = bottomFit.centerY;
-    const hSpacing = bottomFit.spacing;
-    const vSpacing = hSpacing * verticalSpacingFactor;
-    const tilt = bottomFit.angle;
+  function rectRatio(ii, x0, y0, x1, y1) {
+    const w = Math.max(1, Math.round(x1) - Math.round(x0));
+    const h = Math.max(1, Math.round(y1) - Math.round(y0));
+    return rectSum(ii, x0, y0, x1, y1) / (w * h);
+  }
 
-    // Build an untilted lattice first, then rotate around bottom-row center.
+  function pyramidTemplateGeometry(centerX, bottomY, pitch, vFactor, topScale) {
+    const centers = [];
     let tileId = 1;
     for (let row = 1; row <= 7; row += 1) {
-      const count = row;
-      const y = bottomY - (7 - row) * vSpacing;
-      for (let col = 1; col <= count; col += 1) {
-        const x = centerX + (col - (count + 1) / 2) * hSpacing;
-        const rotated = rotatePoint(x, y, centerX, bottomY, tilt);
-        positions.push({
-          tileId,
-          row,
-          col,
-          x: rotated.x,
-          y: rotated.y
+      const t = (row - 1) / 6;
+      const rowPitch = pitch * (topScale + (1 - topScale) * t);
+      const y = bottomY - (7 - row) * pitch * vFactor;
+      for (let col = 1; col <= row; col += 1) {
+        centers.push({
+          tileId, row, col,
+          x: centerX + (col - (row + 1) / 2) * rowPitch,
+          y,
+          r: pitch * 0.39,
+          inferred: false
         });
         tileId += 1;
       }
     }
-
-    return { positions, hSpacing, vSpacing, tilt, centerX, bottomY };
+    return { centerX, bottomY, pitch, vFactor, topScale, centers };
   }
 
-  function nearestCircleForPosition(position, circles, maxDistance, used) {
-    let best = null;
-    let bestIndex = -1;
-    let bestD = Infinity;
-
-    for (let i = 0; i < circles.length; i += 1) {
-      if (used.has(i)) continue;
-      const d = distance(position, circles[i]);
-      if (d < bestD && d <= maxDistance) {
-        best = circles[i];
-        bestIndex = i;
-        bestD = d;
-      }
-    }
-
-    return { circle: best, index: bestIndex, distance: bestD };
+  function edgePatch(ii, x, y, half) {
+    return rectRatio(ii, x - half, y - half, x + half + 1, y + half + 1);
   }
 
-  function scoreLatticeAgainstCircles(lattice, circles) {
-    const used = new Set();
-    const matched = [];
-    const maxDistance = lattice.hSpacing * 0.42;
+  function scoreTemplateCenter(ii, c, pitch) {
+    const r = pitch * 0.39;
+    const patch = Math.max(1.5, pitch * 0.055);
+    const angles = [0,Math.PI/4,Math.PI/2,3*Math.PI/4,Math.PI,5*Math.PI/4,3*Math.PI/2,7*Math.PI/4];
 
-    let totalError = 0;
-    let bottomSupported = 0;
-
-    for (const p of lattice.positions) {
-      const hit = nearestCircleForPosition(p, circles, maxDistance, used);
-
-      if (hit.circle) {
-        used.add(hit.index);
-        const normalizedError = hit.distance / Math.max(1, lattice.hSpacing);
-        totalError += normalizedError;
-
-        if (p.row === 7) bottomSupported += 1;
-
-        matched.push({
-          ...p,
-          x: hit.circle.x,
-          y: hit.circle.y,
-          r: hit.circle.r,
-          supported: true,
-          inferred: false,
-          error: hit.distance
-        });
-      } else {
-        totalError += 0.80;
-        matched.push({
-          ...p,
-          r: median(circles.map((c) => c.r)) || lattice.hSpacing * 0.35,
-          supported: false,
-          inferred: true,
-          error: null
-        });
-      }
+    let outer = 0, inner = 0;
+    for (const a of angles) {
+      outer += edgePatch(ii, c.x + Math.cos(a)*r, c.y + Math.sin(a)*r, patch);
+      inner += edgePatch(ii, c.x + Math.cos(a)*r*0.78, c.y + Math.sin(a)*r*0.78, patch);
     }
+    outer /= angles.length;
+    inner /= angles.length;
 
-    const supportedCount = matched.filter((m) => m.supported).length;
-    const inferredCount = 28 - supportedCount;
+    const centerBusy = rectRatio(ii, c.x-r*0.5, c.y-r*0.5, c.x+r*0.5, c.y+r*0.5);
+    const score = outer*0.58 + inner*0.30 + centerBusy*0.12;
+    return { score, outer, inner, centerBusy };
+  }
 
-    // Heavy penalties for weak bottom-row support and too many inferred centers.
-    const score =
-      totalError +
-      inferredCount * 0.55 +
-      Math.max(0, 7 - bottomSupported) * 1.6;
-
+  function scorePyramidTemplate(ii, g) {
+    const supports = g.centers.map(c => ({...c, ...scoreTemplateCenter(ii,c,g.pitch)}));
+    const mean = supports.reduce((s,c)=>s+c.score,0)/28;
+    const bottom = supports.filter(c=>c.row===7);
+    const bottomMean = bottom.reduce((s,c)=>s+c.score,0)/7;
+    const apex = supports[0].score;
+    const sorted = supports.map(c=>c.score).sort((a,b)=>a-b);
+    const lowQuartile = sorted.slice(0,7).reduce((a,b)=>a+b,0)/7;
     return {
-      matched,
-      supportedCount,
-      inferredCount,
-      bottomSupported,
-      score
+      score: mean*5.5 + bottomMean*2.2 + apex*0.9 + lowQuartile*2.4,
+      mean, bottomMean, apex, lowQuartile, supports
     };
   }
 
-  function fitPyramidGeometry(circles, workWidth, workHeight) {
-    if (circles.length < 12) {
-      return {
-        ok: false,
-        locked: false,
-        reason: `Too few usable contour centers (${circles.length}). Retake with the full pyramid visible and less glare.`,
-        rawCount: circles.length
-      };
-    }
-
-    const bottomFits = estimateBottomRowCandidates(circles, workWidth, workHeight);
-    if (!bottomFits.length) {
-      return {
-        ok: false,
-        locked: false,
-        reason: "Could not establish a credible seven-tile bottom row.",
-        rawCount: circles.length
-      };
-    }
-
+  function fitFixedPyramidTemplate(edgeMask) {
+    const ii = makeIntegralFromBinary(edgeMask);
+    const w = edgeMask.cols, h = edgeMask.rows;
     let best = null;
+    const coarse = [];
 
-    // Evaluate several vertical-spacing factors because camera perspective changes
-    // row spacing slightly from photo to photo.
-    const verticalFactors = [0.78, 0.82, 0.86, 0.90, 0.94, 0.98];
+    function consider(centerX,bottomY,pitch,vFactor,topScale) {
+      const g = pyramidTemplateGeometry(centerX,bottomY,pitch,vFactor,topScale);
+      const left = Math.min(...g.centers.map(c=>c.x-c.r));
+      const right = Math.max(...g.centers.map(c=>c.x+c.r));
+      const top = Math.min(...g.centers.map(c=>c.y-c.r));
+      const bottom = Math.max(...g.centers.map(c=>c.y+c.r));
+      if (left<0 || top<0 || right>=w || bottom>=h) return;
+      const metrics = scorePyramidTemplate(ii,g);
+      const c = {geometry:g,metrics};
+      coarse.push(c);
+      if (!best || metrics.score > best.metrics.score) best = c;
+    }
 
-    for (const bottomFit of bottomFits.slice(0, 12)) {
-      // The bottom row itself must already be fairly regular.
-      if (bottomFit.score > 4.5) continue;
+    const minPitch = Math.round(w*0.075), maxPitch = Math.round(w*0.145);
+    const pitchStep = Math.max(4,Math.round(w*0.007));
+    const centerStep = Math.max(5,Math.round(w*0.010));
+    const bottomStep = Math.max(6,Math.round(h*0.010));
 
-      for (const vf of verticalFactors) {
-        const lattice = buildIdealPyramid(bottomFit, vf);
-        const scored = scoreLatticeAgainstCircles(lattice, circles);
+    for (let pitch=minPitch; pitch<=maxPitch; pitch+=pitchStep) {
+      for (let cx=Math.round(w*0.34); cx<=Math.round(w*0.66); cx+=centerStep) {
+        for (let by=Math.round(h*0.38); by<=Math.round(h*0.72); by+=bottomStep) {
+          for (const vf of [0.76,0.80,0.84,0.88,0.92,0.96]) {
+            for (const ts of [0.92,0.96,1.00]) consider(cx,by,pitch,vf,ts);
+          }
+        }
+      }
+    }
+    if (!best) throw new Error("No fixed pyramid-template candidate fit inside the image.");
 
-        const combinedScore = scored.score + bottomFit.score * 1.3;
-
-        if (!best || combinedScore < best.combinedScore) {
-          best = {
-            bottomFit,
-            lattice,
-            scored,
-            combinedScore
-          };
+    const b = best.geometry;
+    let fineBest = best;
+    for (let pitch=b.pitch-6; pitch<=b.pitch+6; pitch+=2) {
+      for (let cx=b.centerX-10; cx<=b.centerX+10; cx+=2) {
+        for (let by=b.bottomY-12; by<=b.bottomY+12; by+=2) {
+          for (let vf=b.vFactor-0.04; vf<=b.vFactor+0.04; vf+=0.01) {
+            for (let ts=b.topScale-0.03; ts<=b.topScale+0.03; ts+=0.01) {
+              const g = pyramidTemplateGeometry(cx,by,pitch,vf,ts);
+              const left = Math.min(...g.centers.map(c=>c.x-c.r));
+              const right = Math.max(...g.centers.map(c=>c.x+c.r));
+              const top = Math.min(...g.centers.map(c=>c.y-c.r));
+              const bottom = Math.max(...g.centers.map(c=>c.y+c.r));
+              if (left<0 || top<0 || right>=w || bottom>=h) continue;
+              const metrics = scorePyramidTemplate(ii,g);
+              if (metrics.score > fineBest.metrics.score) fineBest = {geometry:g,metrics};
+            }
+          }
         }
       }
     }
 
-    if (!best) {
-      return {
-        ok: false,
-        locked: false,
-        reason: "No globally consistent 28-position pyramid lattice could be fitted.",
-        rawCount: circles.length
-      };
-    }
+    const alternatives = coarse.filter(c=>{
+      const a=c.geometry,g=fineBest.geometry;
+      return Math.abs(a.centerX-g.centerX)>g.pitch*0.55 ||
+             Math.abs(a.bottomY-g.bottomY)>g.pitch*0.55 ||
+             Math.abs(a.pitch-g.pitch)>g.pitch*0.15;
+    }).sort((a,b)=>b.metrics.score-a.metrics.score);
 
-    const { scored, lattice } = best;
-    const centers = scored.matched.map((m) => ({
-      tileId: m.tileId,
-      row: m.row,
-      col: m.col,
-      x: m.x,
-      y: m.y,
-      r: m.r,
-      inferred: m.inferred
+    const second = alternatives[0] || null;
+    const margin = second ? fineBest.metrics.score-second.metrics.score : fineBest.metrics.score;
+    const normalizedMargin = margin/Math.max(0.0001,fineBest.metrics.score);
+    const supportThreshold = Math.max(0.018,fineBest.metrics.mean*0.42);
+
+    const centers = fineBest.metrics.supports.map(s=>({
+      tileId:s.tileId,row:s.row,col:s.col,x:s.x,y:s.y,r:s.r,
+      inferred:s.score<supportThreshold,
+      templateSupport:s.score
     }));
+    const supportedCount = centers.filter(c=>!c.inferred).length;
+    const bottomSupported = centers.filter(c=>c.row===7&&!c.inferred).length;
+    const apexSupported = !centers[0].inferred;
 
     const rowDiagnostics = [];
-    for (let row = 1; row <= 7; row += 1) {
-      const rowCenters = scored.matched.filter((m) => m.row === row);
-      const supported = rowCenters.filter((m) => m.supported).length;
-      rowDiagnostics.push({
-        row,
-        supported,
-        expected: row
-      });
+    for (let row=1; row<=7; row+=1) {
+      const rr=centers.filter(c=>c.row===row);
+      rowDiagnostics.push({row,supported:rr.filter(c=>!c.inferred).length,expected:row});
     }
 
-    const supportedCount = scored.supportedCount;
-    const inferredCount = scored.inferredCount;
-    const bottomSupported = scored.bottomSupported;
-
-    // Stronger confidence gating than v0.10.4.
-    let quality = "bad";
-    let locked = false;
-
-    if (supportedCount >= 26 && bottomSupported >= 6) {
-      quality = "good";
-      locked = true;
-    } else if (supportedCount >= 23 && bottomSupported >= 6) {
-      quality = "warn";
-      locked = false;
-    } else {
-      quality = "bad";
-      locked = false;
+    let quality="bad", locked=false;
+    if (supportedCount>=24 && bottomSupported>=6 && apexSupported && normalizedMargin>=0.02) {
+      quality="good"; locked=true;
+    } else if (supportedCount>=21 && bottomSupported>=5 && apexSupported) {
+      quality="warn";
     }
 
     return {
-      ok: centers.length === 28,
-      locked,
-      centers,
-      supportedCount,
-      inferredCount,
-      bottomSupported,
-      rowDiagnostics,
-      rawCount: circles.length,
-      quality,
-      hSpacing: lattice.hSpacing,
-      vSpacing: lattice.vSpacing,
-      detector: "bottom-row anchored constrained lattice",
-      combinedScore: best.combinedScore
+      ok:true,locked,quality,centers,supportedCount,bottomSupported,apexSupported,rowDiagnostics,
+      detector:"fixed-28-position-pyramid-template",
+      templateScore:fineBest.metrics.score,
+      secondScore:second?second.metrics.score:null,
+      normalizedMargin,
+      workGeometry:fineBest.geometry
     };
   }
 
   function detectCirclesWithOpenCv() {
-    if (!cvReady || !window.cv) {
-      throw new Error("OpenCV is not ready.");
-    }
-
+    if (!cvReady || !window.cv) throw new Error("OpenCV is not ready.");
     restoreOriginalCapture();
 
-    let src = null;
-    let small = null;
-    let gray = null;
-    let blurred = null;
-    let edges = null;
-    let closed = null;
-    let contours = null;
-    let hierarchy = null;
-    let kernel = null;
-
+    let src=null, small=null, gray=null, blurred=null, edges=null;
     try {
-      const cv = window.cv;
-      src = cv.imread(canvas);
+      const cv=window.cv;
+      src=cv.imread(canvas);
+      const targetWidth=Math.min(640,src.cols);
+      const scale=targetWidth/src.cols;
+      const targetHeight=Math.max(1,Math.round(src.rows*scale));
 
-      const targetWidth = Math.min(760, src.cols);
-      const scale = targetWidth / src.cols;
-      const targetHeight = Math.max(1, Math.round(src.rows * scale));
+      small=new cv.Mat();
+      cv.resize(src,small,new cv.Size(targetWidth,targetHeight),0,0,cv.INTER_AREA);
 
-      small = new cv.Mat();
-      cv.resize(
-        src,
-        small,
-        new cv.Size(targetWidth, targetHeight),
-        0,
-        0,
-        cv.INTER_AREA
-      );
+      gray=new cv.Mat();
+      cv.cvtColor(small,gray,cv.COLOR_RGBA2GRAY);
 
-      // This is intentionally the same family of operations that the working
-      // FreeCell photo scanner already uses with this exact OpenCV build.
-      gray = new cv.Mat();
-      cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
+      blurred=new cv.Mat();
+      cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);
 
-      blurred = new cv.Mat();
-      cv.GaussianBlur(gray, blurred, new cv.Size(7, 7), 0);
+      edges=new cv.Mat();
+      cv.Canny(blurred,edges,42,126);
 
-      edges = new cv.Mat();
-      cv.Canny(blurred, edges, 45, 135);
-
-      // Close small breaks in the circular emblem outlines so findContours()
-      // sees them as compact objects instead of fragmented arcs.
-      closed = new cv.Mat();
-      kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
-      cv.morphologyEx(edges, closed, cv.MORPH_CLOSE, kernel);
-
-      contours = new cv.MatVector();
-      hierarchy = new cv.Mat();
-      cv.findContours(
-        closed,
-        contours,
-        hierarchy,
-        cv.RETR_LIST,
-        cv.CHAIN_APPROX_SIMPLE
-      );
-
-      const imageArea = targetWidth * targetHeight;
-      const minDim = Math.min(targetWidth, targetHeight);
-
-      // The photographed circular emblems are typically a few percent of the
-      // working width. Keep a deliberately broad range because camera distance
-      // and perspective vary.
-      const minBox = Math.max(15, targetWidth * 0.025);
-      const maxBox = Math.max(minBox + 5, targetWidth * 0.13);
-      const circles = [];
-      const debugCandidates = [];
-
-      for (let i = 0; i < contours.size(); i += 1) {
-        const contour = contours.get(i);
-        try {
-          const rect = cv.boundingRect(contour);
-          const w = rect.width;
-          const h = rect.height;
-
-          if (w < minBox || h < minBox || w > maxBox || h > maxBox) continue;
-
-          const aspect = w / Math.max(1, h);
-          if (aspect < 0.66 || aspect > 1.50) continue;
-
-          // Restrict candidate search to the broad area where the pyramid
-          // appears in real camera captures. This removes most UI controls.
-          const cx = rect.x + w / 2;
-          const cy = rect.y + h / 2;
-          if (cx < targetWidth * 0.07 || cx > targetWidth * 0.93) continue;
-          if (cy < targetHeight * 0.10 || cy > targetHeight * 0.78) continue;
-
-          const area = Math.abs(cv.contourArea(contour));
-          const boxArea = w * h;
-          if (boxArea <= 0) continue;
-
-          // Circular/ring contours do not always fill the rectangle, especially
-          // after Canny, so use a forgiving fill range.
-          const fill = area / boxArea;
-          if (fill < 0.10 || fill > 0.92) continue;
-
-          const perimeter = cv.arcLength(contour, true);
-          if (perimeter <= 0) continue;
-
-          // 4*pi*A/P^2 approaches 1 for compact circles. Edge rings and partial
-          // contours score lower, so keep a loose threshold.
-          const circularity = (4 * Math.PI * area) / (perimeter * perimeter);
-          if (circularity < 0.18) continue;
-
-          const radius = (w + h) / 4;
-          circles.push({
-            x: cx,
-            y: cy,
-            r: radius,
-            aspect,
-            fill,
-            circularity
-          });
-          debugCandidates.push({ x: cx, y: cy, w, h, circularity });
-        } finally {
-          contour.delete();
-        }
-      }
-
-      // findContours frequently returns nested contours for one emblem.
-      // Merge near-duplicate centers before fitting the seven-row lattice.
-      circles.sort((a, b) => b.circularity - a.circularity);
-      const deduped = [];
-      for (const c of circles) {
-        const duplicate = deduped.some((d) => {
-          const dx = c.x - d.x;
-          const dy = c.y - d.y;
-          const minR = Math.min(c.r, d.r);
-          return Math.hypot(dx, dy) < Math.max(8, minR * 0.70);
-        });
-        if (!duplicate) deduped.push(c);
-      }
-
-      const geometry = fitPyramidGeometry(deduped, targetWidth, targetHeight);
-      geometry.rawContourCount = contours.size();
-      geometry.rawCount = deduped.length;
-      geometry.scaleToCanvasX = canvas.width / targetWidth;
-      geometry.scaleToCanvasY = canvas.height / targetHeight;
-      geometry.workWidth = targetWidth;
-      geometry.workHeight = targetHeight;
-      geometry.detector = "Canny + MORPH_CLOSE + findContours";
-      return geometry;
+      const result=fitFixedPyramidTemplate(edges);
+      result.scaleToCanvasX=canvas.width/targetWidth;
+      result.scaleToCanvasY=canvas.height/targetHeight;
+      result.workWidth=targetWidth;
+      result.workHeight=targetHeight;
+      return result;
     } finally {
-      if (kernel) kernel.delete();
-      if (hierarchy) hierarchy.delete();
-      if (contours) contours.delete();
-      if (closed) closed.delete();
-      if (edges) edges.delete();
-      if (blurred) blurred.delete();
-      if (gray) gray.delete();
-      if (small) small.delete();
-      if (src) src.delete();
+      if(edges)edges.delete(); if(blurred)blurred.delete(); if(gray)gray.delete(); if(small)small.delete(); if(src)src.delete();
     }
   }
 
@@ -671,33 +434,23 @@
   }
 
   function geometryHtml(g) {
-    if (!g.ok) {
-      return `<strong>Pyramid alignment failed.</strong><br>
-        ${g.reason || "The fit was not reliable enough."}<br>
-        Try retaking with all 28 circular emblems visible and the phone roughly centered.`;
-    }
-
-    const chips = g.rowDiagnostics.map((r) =>
-      `<div class="geometry-chip">Row ${r.row}: ${r.supported}/${r.expected}</div>`
-    ).join("");
-
+    if (!g.ok) return `<strong>Pyramid-template fit failed.</strong><br>${g.reason || "No template fit."}`;
+    const chips=g.rowDiagnostics.map(r=>`<div class="geometry-chip">Row ${r.row}: ${r.supported}/${r.expected}</div>`).join("");
+    const marginPct=Math.round((g.normalizedMargin||0)*1000)/10;
     if (g.locked) {
-      return `<strong>28-tile pyramid geometry LOCKED.</strong><br>
-        ${g.supportedCount}/28 centers directly supported; bottom row ${g.bottomSupported}/7 supported.<br>
-        Green = directly supported center. Yellow = lattice inference.
+      return `<strong>28-position pyramid template LOCKED.</strong><br>
+        ${g.supportedCount}/28 strongly supported; bottom ${g.bottomSupported}/7; apex supported.<br>
+        Best-vs-second template separation: ${marginPct}%.
         <div class="geometry-grid">${chips}</div>`;
     }
-
-    if (g.quality === "warn") {
-      return `<strong>Alignment found, but NOT LOCKED.</strong><br>
-        ${g.supportedCount}/28 centers directly supported; bottom row ${g.bottomSupported}/7 supported.<br>
-        The geometry is plausible, but confidence is not high enough to continue automatically.
+    if (g.quality==="warn") {
+      return `<strong>Template fit found — CHECK ALIGNMENT.</strong><br>
+        ${g.supportedCount}/28 strongly supported; bottom ${g.bottomSupported}/7; apex ${g.apexSupported?"supported":"weak"}.<br>
+        The 28 legal positions come from the fixed template, but confidence is not high enough to continue automatically.
         <div class="geometry-grid">${chips}</div>`;
     }
-
-    return `<strong>Pyramid alignment uncertain — RETAKE / RETRY.</strong><br>
-      ${g.supportedCount}/28 centers directly supported; bottom row ${g.bottomSupported}/7 supported.<br>
-      v0.10.5 will not claim a lock when the fit is weak.
+    return `<strong>Template fit uncertain — RETAKE / RETRY.</strong><br>
+      ${g.supportedCount}/28 strongly supported; bottom ${g.bottomSupported}/7; apex ${g.apexSupported?"supported":"weak"}.
       <div class="geometry-grid">${chips}</div>`;
   }
 
@@ -713,7 +466,7 @@
 
     detectButton.disabled = true;
     keepButton.disabled = true;
-    setGeometrySummary("Anchoring the 7-tile bottom row, projecting the full 28-position lattice, and validating every legal tile position…", "");
+    setGeometrySummary("Fitting the canonical 28-position pyramid template over the photographed board…", "");
 
     // Yield once so Safari paints the status before the heavier OpenCV work.
     window.setTimeout(() => {
@@ -791,11 +544,7 @@
 
   function markCvReady() {
     const cv = window.cv;
-    const required = [
-      "Mat", "MatVector", "imread", "resize", "cvtColor", "GaussianBlur",
-      "Canny", "getStructuringElement", "morphologyEx", "findContours",
-      "boundingRect", "contourArea", "arcLength"
-    ];
+    const required = ["Mat","imread","resize","cvtColor","GaussianBlur","Canny"];
     const missing = required.filter((name) => typeof cv?.[name] === "undefined");
     if (missing.length) {
       cvReady = false;
@@ -806,7 +555,7 @@
       return;
     }
     cvReady = true;
-    setCvStatus("OpenCV ready — FreeCell-compatible contour detector available.", "ready");
+    setCvStatus("OpenCV ready — FreeCell-style fixed-template matcher available.", "ready");
   }
 
   function markCvError(message) {
