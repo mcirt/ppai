@@ -42,7 +42,7 @@
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.10.6 — Fixed Pyramid Template</div>
+<div class="version">PPAI JS v0.10.7 — Pyramid Template Registration</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
@@ -52,7 +52,7 @@
 
 <div class="scan-panel">
   <h2>Camera Input</h2>
-  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.10.6 uses a FreeCell-style fixed geometric pyramid template. OpenCV fits one known 28-position template over the captured photo instead of rediscovering rows and circles.</p>
+  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.10.7 treats the pyramid as one registration target: OpenCV searches the photo for the transform that best aligns the complete outer pyramid silhouette and all 28 expected emoji circles.</p>
   <div class="scan-row">
     <button id="scanPyramidButton" class="scan-button" type="button">Scan Pyramid</button>
   </div>
@@ -134,7 +134,7 @@
         <canvas id="ppaiCaptureCanvas"></canvas>
       </div>
       <div id="ppaiCvProof" class="scan-proof"></div>
-      <div id="ppaiGeometrySummary" class="geometry-summary">Geometry has not been analyzed yet. v0.10.6 fits one canonical 28-position pyramid template over the photo.</div>
+      <div id="ppaiGeometrySummary" class="geometry-summary">Geometry has not been analyzed yet. v0.10.7 aligns one full pyramid registration template to the photographed board.</div>
       <div class="scan-row">
         <button id="ppaiDetectGeometryButton" class="scan-button" type="button">Detect 28 Tile Centers</button>
         <button id="ppaiRetakeButton" class="scan-button secondary" type="button">Retake</button>
@@ -149,7 +149,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.10.6'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.10.7'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
