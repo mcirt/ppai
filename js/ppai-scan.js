@@ -377,26 +377,34 @@
 
   // ---- Lightweight fixed screen-normalized pyramid template ----
   function buildScreenTemplate(w,h,params) {
-    const cx=params.cx*w;
-    const bottomY=params.bottomY*h;
-    const xPitch=params.xPitch*w;
-    const yPitch=params.yPitch*h;
-    const r=xPitch*0.39;
-
-    const centers=[];
-    let tileId=1;
-    for(let row=1;row<=7;row++) {
-      const y=bottomY-(7-row)*yPitch;
-      for(let col=1;col<=row;col++) {
-        centers.push({
-          tileId,row,col,
-          x:cx+(col-(row+1)/2)*xPitch,
-          y,r,inferred:false
-        });
-        tileId++;
-      }
+    const ref = window.PPAI_PYRAMID_REFERENCE;
+    if (!ref || !ref.pyramid || !Array.isArray(ref.pyramid.tileCenters)) {
+      throw new Error("Static pyramid reference geometry is not loaded.");
     }
-    return {centers,...params,xPitchPx:xPitch,yPitchPx:yPitch};
+
+    // Exact normalized geometry measured from the user-supplied straight-on
+    // reference screenshot. Search only a small registration transform around it.
+    const base = ref.pyramid.tileCenters;
+    const cx = params.cx;
+    const cy = params.cy;
+    const sx = params.sx;
+    const sy = params.sy;
+
+    const centers = base.map((p) => {
+      const dx = (p.x - ref.pyramid.centerX);
+      const dy = (p.y - ref.pyramid.bottomRowCenterY);
+      return {
+        tileId: p.tileId,
+        row: p.row,
+        col: p.col,
+        x: (cx + dx * sx) * w,
+        y: (cy + dy * sy) * h,
+        r: p.r * sx * w,
+        inferred: false
+      };
+    });
+
+    return { centers, cx, cy, sx, sy, xPitchPx: ref.pyramid.horizontalPitch*sx*w, yPitchPx: ref.pyramid.verticalPitch*sy*h };
   }
 
   function sampleGrayEdge(data,w,h,x,y,rad) {
@@ -441,6 +449,9 @@
 
   function fitPyramidOnRectifiedScreen(sourceCanvas) {
     const cv=window.cv;
+    const ref=window.PPAI_PYRAMID_REFERENCE;
+    if(!ref) throw new Error("Static pyramid reference is not loaded.");
+
     let src=null,small=null,gray=null,blurred=null,edges=null;
     try {
       src=cv.imread(sourceCanvas);
@@ -458,46 +469,47 @@
       cv.Canny(blurred,edges,42,126);
 
       const edgeData=new Uint8Array(edges.data.length);
-      for(let i=0;i<edges.data.length;i++)edgeData[i]=edges.data[i]?1:0;
+      for(let i=0;i<edges.data.length;i++) edgeData[i]=edges.data[i]?1:0;
 
-      // Calibrated from the actual full-screen PPAI board geometry.
-      // Search only a modest neighborhood after perspective rectification.
-      const bases={
-        cx:0.500,
-        bottomY:0.525,
-        xPitch:0.141,
-        yPitch:0.0525
-      };
+      // Exact reference geometry. Only a compact translation/scale registration
+      // is needed after perspective rectification.
+      const baseCx=ref.pyramid.centerX;
+      const baseCy=ref.pyramid.bottomRowCenterY;
 
       let best=null;
       const candidates=[];
 
-      for(let cx=bases.cx-0.035;cx<=bases.cx+0.035+1e-9;cx+=0.007) {
-        for(let by=bases.bottomY-0.045;by<=bases.bottomY+0.045+1e-9;by+=0.009) {
-          for(let xp=bases.xPitch*0.91;xp<=bases.xPitch*1.09+1e-9;xp+=bases.xPitch*0.03) {
-            for(let yp=bases.yPitch*0.90;yp<=bases.yPitch*1.10+1e-9;yp+=bases.yPitch*0.04) {
-              const t=buildScreenTemplate(targetWidth,targetHeight,{cx,bottomY:by,xPitch:xp,yPitch:yp});
-              const score=scoreTemplate(edgeData,targetWidth,targetHeight,t);
-              const cand={template:t,metrics:score};
-              candidates.push(cand);
-              if(!best || score.score>best.metrics.score)best=cand;
+      function evaluate(cx,cy,sx,sy) {
+        const t=buildScreenTemplate(targetWidth,targetHeight,{cx,cy,sx,sy});
+        const metrics=scoreTemplate(edgeData,targetWidth,targetHeight,t);
+        const c={template:t,metrics};
+        candidates.push(c);
+        if(!best || metrics.score>best.metrics.score) best=c;
+      }
+
+      // Coarse registration near the exact supplied reference.
+      for(let cx=baseCx-0.045;cx<=baseCx+0.045+1e-9;cx+=0.009) {
+        for(let cy=baseCy-0.050;cy<=baseCy+0.050+1e-9;cy+=0.010) {
+          for(let sx=0.88;sx<=1.12+1e-9;sx+=0.04) {
+            for(let sy=0.88;sy<=1.12+1e-9;sy+=0.04) {
+              evaluate(cx,cy,sx,sy);
             }
           }
         }
       }
 
-      if(!best)throw new Error("No pyramid template candidate was evaluated.");
+      if(!best) throw new Error("Static pyramid reference registration evaluated no candidates.");
 
-      // Small local refine around best.
+      // Fine registration around the winning transform.
       let refined=best;
       const b=best.template;
-      for(let cx=b.cx-0.008;cx<=b.cx+0.008+1e-9;cx+=0.002) {
-        for(let by=b.bottomY-0.012;by<=b.bottomY+0.012+1e-9;by+=0.003) {
-          for(let xp=b.xPitch*0.975;xp<=b.xPitch*1.025+1e-9;xp+=b.xPitch*0.01) {
-            for(let yp=b.yPitch*0.97;yp<=b.yPitch*1.03+1e-9;yp+=b.yPitch*0.015) {
-              const t=buildScreenTemplate(targetWidth,targetHeight,{cx,bottomY:by,xPitch:xp,yPitch:yp});
-              const score=scoreTemplate(edgeData,targetWidth,targetHeight,t);
-              if(score.score>refined.metrics.score)refined={template:t,metrics:score};
+      for(let cx=b.cx-0.012;cx<=b.cx+0.012+1e-9;cx+=0.003) {
+        for(let cy=b.cy-0.014;cy<=b.cy+0.014+1e-9;cy+=0.0035) {
+          for(let sx=b.sx-0.035;sx<=b.sx+0.035+1e-9;sx+=0.01) {
+            for(let sy=b.sy-0.035;sy<=b.sy+0.035+1e-9;sy+=0.01) {
+              const t=buildScreenTemplate(targetWidth,targetHeight,{cx,cy,sx,sy});
+              const metrics=scoreTemplate(edgeData,targetWidth,targetHeight,t);
+              if(metrics.score>refined.metrics.score) refined={template:t,metrics};
             }
           }
         }
@@ -505,8 +517,9 @@
 
       const alternatives=candidates.filter(c=>
         Math.abs(c.template.cx-refined.template.cx)>0.025 ||
-        Math.abs(c.template.bottomY-refined.template.bottomY)>0.035 ||
-        Math.abs(c.template.xPitch-refined.template.xPitch)>0.012
+        Math.abs(c.template.cy-refined.template.cy)>0.030 ||
+        Math.abs(c.template.sx-refined.template.sx)>0.07 ||
+        Math.abs(c.template.sy-refined.template.sy)>0.07
       ).sort((a,b)=>b.metrics.score-a.metrics.score);
 
       const second=alternatives[0]||null;
@@ -514,13 +527,14 @@
       const normalizedMargin=margin/Math.max(1e-6,refined.metrics.score);
       const threshold=Math.max(0.010,refined.metrics.mean*0.42);
 
-      const sx=sourceCanvas.width/targetWidth;
-      const sy=sourceCanvas.height/targetHeight;
+      const sxCanvas=sourceCanvas.width/targetWidth;
+      const syCanvas=sourceCanvas.height/targetHeight;
+
       const centers=refined.template.centers.map((c,i)=>({
         ...c,
-        x:c.x*sx,
-        y:c.y*sy,
-        r:c.r*(sx+sy)/2,
+        x:c.x*sxCanvas,
+        y:c.y*syCanvas,
+        r:c.r*(sxCanvas+syCanvas)/2,
         inferred:refined.metrics.supports[i]<threshold,
         templateSupport:refined.metrics.supports[i]
       }));
@@ -528,6 +542,7 @@
       const supportedCount=centers.filter(c=>!c.inferred).length;
       const bottomSupported=centers.filter(c=>c.row===7&&!c.inferred).length;
       const apexSupported=!centers[0].inferred;
+
       const rowDiagnostics=[];
       for(let row=1;row<=7;row++) {
         const rr=centers.filter(c=>c.row===row);
@@ -535,9 +550,9 @@
       }
 
       let quality="bad",locked=false;
-      if(supportedCount>=24 && bottomSupported>=6 && apexSupported && normalizedMargin>=0.015) {
+      if(supportedCount>=25 && bottomSupported>=6 && apexSupported && normalizedMargin>=0.012) {
         quality="good"; locked=true;
-      } else if(supportedCount>=20 && bottomSupported>=5) {
+      } else if(supportedCount>=21 && bottomSupported>=5) {
         quality="warn";
       }
 
@@ -546,7 +561,14 @@
         rowDiagnostics,normalizedMargin,
         workWidth:sourceCanvas.width,workHeight:sourceCanvas.height,
         scaleToCanvasX:1,scaleToCanvasY:1,
-        detector:"screen-rectification-first-fixed-template"
+        detector:"static-reference-screen-registration",
+        referenceImage:ref.referenceImage,
+        registration:{
+          cx:refined.template.cx,
+          cy:refined.template.cy,
+          sx:refined.template.sx,
+          sy:refined.template.sy
+        }
       };
     } finally {
       if(edges)edges.delete();
@@ -630,7 +652,7 @@
         rectifiedCanvas=rectifyPhoto();
         restoreCanvasFrom(rectifiedCanvas);
 
-        setGeometrySummary("Screen straightened. Fitting the fixed 28-circle pyramid template…","");
+        setGeometrySummary("Screen straightened. Registering against the exact static pyramid geometry from the supplied reference screenshot…","");
         window.setTimeout(()=>{
           try {
             const g=fitPyramidOnRectifiedScreen(rectifiedCanvas);
@@ -732,7 +754,7 @@
       return;
     }
     cvReady=true;
-    setCvStatus("OpenCV ready — screen rectification + pyramid template available.","ready");
+    setCvStatus("OpenCV ready — screen rectification + static reference registration available.","ready");
   }
 
   function markCvError(message) {
