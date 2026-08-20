@@ -40,11 +40,25 @@
 
 
 
+
+.recognition-panel{margin:10px auto 0;max-width:620px;padding:9px;border:1px solid #c7d2dc;border-radius:9px;background:#f8fbfd;text-align:left}
+.recognition-panel[hidden]{display:none}
+.recognition-title{font-weight:800;margin-bottom:5px}
+.recognition-note{font-size:12px;color:#555;line-height:1.35}
+.recognition-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}
+.recognition-item{border:1px solid #d7dde3;border-radius:7px;background:#fff;padding:5px;text-align:center;font-size:11px}
+.recognition-item.good{border-color:#7acb8b;background:#f1fbf3}
+.recognition-item.warn{border-color:#d9b75c;background:#fff9e8}
+.recognition-item.bad{border-color:#d98b8b;background:#fff0f0}
+.recognition-item img{display:block;width:34px;height:34px;object-fit:contain;margin:0 auto 3px}
+.recognition-confidence{font-weight:700}
+@media(max-width:520px){.recognition-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
 </style>
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.11.0 — Direct Pyramid Template Registration</div>
+<div class="version">PPAI JS v0.11.1 — Pyramid Emoji Recognition</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
@@ -54,7 +68,7 @@
 
 <div class="scan-panel">
   <h2>Camera Input</h2>
-  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.11.0 uses the supplied straight-on screenshot as the canonical pyramid reference and registers that pyramid directly against the camera photo. There is no screen-corner or perspective-rectification step.</p>
+  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.11.1 keeps direct static-template registration and adds Tiles 1–28 emoji recognition from the locked pyramid circles. Recognition is reviewed before it is applied to the sequential input board.</p>
   <div class="scan-row">
     <button id="scanPyramidButton" class="scan-button" type="button">Scan Pyramid</button>
   </div>
@@ -137,8 +151,16 @@
       </div>
       <div id="ppaiCvProof" class="scan-proof"></div>
       <div id="ppaiGeometrySummary" class="geometry-summary">Geometry has not been analyzed yet. v0.11.0 directly fits the static 28-circle pyramid template to the photographed board.</div>
+      <div id="ppaiRecognitionPanel" class="recognition-panel" hidden>
+        <div class="recognition-title">Pyramid Recognition — Tiles 1–28</div>
+        <div id="ppaiRecognitionNote" class="recognition-note">Lock the pyramid geometry first.</div>
+        <div id="ppaiRecognitionGrid" class="recognition-grid"></div>
+      </div>
+
       <div class="scan-row">
         <button id="ppaiDetectGeometryButton" class="scan-button" type="button">Detect Pyramid Template</button>
+        <button id="ppaiRecognizePyramidButton" class="scan-button" type="button" disabled>Recognize Tiles 1–28</button>
+        <button id="ppaiApplyRecognitionButton" class="scan-button" type="button" disabled>Apply Tiles 1–28</button>
         <button id="ppaiRetakeButton" class="scan-button secondary" type="button">Retake</button>
         <button id="ppaiKeepCaptureButton" class="scan-button" type="button" disabled>Keep Aligned Pyramid</button>
       </div>
@@ -151,7 +173,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.11.0'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.11.1'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
@@ -171,6 +193,32 @@ function handleBoardTileClick(id){if(activeHintKey){setHint(activeHintKey,id);ar
 function makeKeyboard(){const k=document.getElementById('emojiKeyboard');for(let i=1;i<=18;i++){const key=`emoji${i}`;const b=document.createElement('button');b.className='emoji-key';b.dataset.emoji=key;b.title=key;b.style.backgroundImage=`url('${emojiPath(key)}')`;b.addEventListener('click',()=>enterEmoji(key,b));k.appendChild(b)}}
 function recalc(){currentTile=1;while(currentTile<=52&&normalizeEmoji(tileData[currentTile]))currentTile++;updateStatus()}
 function enterEmoji(key,button){if(selectedTileId!==null){const id=selectedTileId;tileData[id]=key;setTileValue(id,key);clearTileSelection();recalc();updateStatus(`Tile ${id} updated to ${key}.`)}else{if(currentTile>52){updateStatus('All 52 tiles are filled. Tap a tile to edit it.');return}tileData[currentTile]=key;setTileValue(currentTile,key);currentTile++;updateStatus()}document.querySelectorAll('.emoji-key.active').forEach(x=>x.classList.remove('active'));button.classList.add('active');setTimeout(()=>button.classList.remove('active'),140)}
+
+window.ppaiApplyRecognizedPyramid=function(results){
+  if(!Array.isArray(results)||results.length!==28){
+    updateStatus('Recognition result did not contain exactly 28 pyramid tiles.');
+    return false;
+  }
+  const clean={};
+  for(const r of results){
+    const id=Number(r.tileId);
+    const emoji=normalizeEmoji(r.emoji);
+    if(!(id>=1&&id<=28)||!emoji){
+      updateStatus(`Recognition result for Tile ${id||'?'} is invalid.`);
+      return false;
+    }
+    clean[id]=emoji;
+  }
+  for(let id=1;id<=28;id++){
+    tileData[id]=clean[id];
+    setTileValue(id,clean[id]);
+  }
+  clearTileSelection();
+  recalc();
+  updateStatus('Pyramid scan applied: Tiles 1–28 filled. Next input: Tile 29 of 52.');
+  return true;
+};
+
 function boardHasData(){return Object.values(tileData).some(normalizeEmoji)}
 function openDestination(fileName,windowName){if(!boardHasData()){updateStatus('Enter at least one emoji first.');return}localStorage.setItem('tileData',JSON.stringify(tileData));localStorage.setItem('ppaiVersion',VERSION);localStorage.setItem('sourceFilename',currentFilename||'');localStorage.setItem('solverHints',JSON.stringify(hints));localStorage.setItem('ppaiSolverMode',solverMode);localStorage.setItem('ppaiSolverDepthMode',solverDepthMode);localStorage.setItem('ppaiMemoryUseMode',document.getElementById('memoryUseMode').value);const w=window.open(fileName,windowName);if(!w)location.href=fileName}
 function setFileStatus(){document.getElementById('fileStatus').textContent=currentFilename?`Loaded: ${currentFilename}`:'No file loaded'}
