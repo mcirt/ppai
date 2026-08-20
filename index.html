@@ -54,11 +54,39 @@
 .recognition-confidence{font-weight:700}
 @media(max-width:520px){.recognition-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 
+
+/* ---------- v0.12.0 live inventory scanner ---------- */
+.inventory-scan-dialog{position:fixed;inset:0;z-index:6200;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:8px}
+.inventory-scan-dialog[hidden]{display:none}
+.inventory-scan-card{width:min(760px,100%);max-height:97vh;overflow:auto;background:#fff;border-radius:12px;padding:10px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.inventory-scan-card h2{margin:0 0 4px;font-size:22px}
+.inventory-progress{font-size:14px;font-weight:800;margin:4px 0 8px}
+.inventory-camera-wrap{position:relative;max-width:650px;margin:0 auto;background:#000;border-radius:10px;overflow:hidden}
+#ppaiInventoryVideo{display:block;width:100%;height:auto;max-height:69vh;object-fit:contain;background:#000}
+.inventory-guides{position:absolute;inset:0;pointer-events:none}
+.inventory-guide{position:absolute;width:19%;aspect-ratio:1/1;border:3px solid rgba(255,255,255,.93);border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 2px rgba(0,0,0,.35),0 0 13px rgba(255,255,255,.35)}
+.inventory-guide span{position:absolute;left:50%;top:-30px;transform:translateX(-50%);background:rgba(0,0,0,.68);color:#fff;padding:3px 7px;border-radius:6px;font-size:13px;font-weight:900}
+.inventory-guide.x{left:36%;top:53%}.inventory-guide.y{left:50%;top:53%}.inventory-guide.z{left:64%;top:53%}
+.inventory-occlusion{position:absolute;top:5%;bottom:5%;right:-3%;background:rgba(255,80,80,.18);border-left:1px dashed rgba(255,100,100,.8);border-radius:0 50% 50% 0}
+.inventory-guide.x .inventory-occlusion{width:39%}.inventory-guide.y .inventory-occlusion{width:30%}.inventory-guide.z .inventory-occlusion{display:none}
+.inventory-live-results{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;max-width:650px;margin:8px auto 0}
+.inventory-result{border:1px solid #cbd3db;border-radius:8px;padding:6px;text-align:center;background:#f7f9fb;min-height:72px}
+.inventory-result.stable{border-color:#62b978;background:#eef9f1}.inventory-result.uncertain{border-color:#d4ad4d;background:#fff8e3}
+.inventory-result .slot{font-weight:900}.inventory-result img{width:38px;height:38px;vertical-align:middle;object-fit:contain}
+.inventory-result .guess{font-size:12px;font-weight:800}.inventory-result .status{font-size:11px;color:#555}
+.inventory-live-note{max-width:650px;margin:7px auto 0;font-size:12px;line-height:1.35;color:#555}
+.inventory-action-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:650px;margin:9px auto 0}
+.inventory-action-row button{border:0;border-radius:8px;padding:10px 14px;font-size:15px;font-weight:800;cursor:pointer}
+.inventory-accept{background:#17833b;color:#fff}.inventory-close{background:#666;color:#fff}.inventory-restart{background:#1769aa;color:#fff}
+.inventory-action-row button:disabled{opacity:.42;cursor:default}
+.inventory-status{max-width:650px;margin:7px auto 0;padding:7px;border-radius:7px;background:#f1f4f7;font-size:12px;font-weight:700}
+@media(max-width:520px){.inventory-guide{width:21%}.inventory-guide.x{left:35%}.inventory-guide.z{left:65%}.inventory-action-row button{flex:1 1 120px}}
+
 </style>
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.11.1 — Pyramid Emoji Recognition</div>
+<div class="version">PPAI JS v0.12.0 — Live Inventory Scanner</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
@@ -68,9 +96,10 @@
 
 <div class="scan-panel">
   <h2>Camera Input</h2>
-  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.11.1 keeps direct static-template registration and adds Tiles 1–28 emoji recognition from the locked pyramid circles. Recognition is reviewed before it is applied to the sequential input board.</p>
+  <p><strong>Recommended workflow:</strong> enter Pyramid Tiles 1–28 manually, then use <strong>Live Scan Inventory</strong>. The live scanner starts with Tiles 29–31 and continues in groups of three through Tiles 50–52.</p>
   <div class="scan-row">
-    <button id="scanPyramidButton" class="scan-button" type="button">Scan Pyramid</button>
+    <button id="scanInventoryButton" class="scan-button" type="button">Live Scan Inventory</button>
+    <button id="scanPyramidButton" class="scan-button secondary" type="button">Pyramid Scanner (Experimental)</button>
   </div>
   <div id="opencvStatus" class="opencv-status working" role="status">Loading OpenCV…</div>
 </div>
@@ -130,6 +159,43 @@
 
 
 
+
+<div id="ppaiInventoryDialog" class="inventory-scan-dialog" hidden role="dialog" aria-modal="true" aria-label="Live Inventory Scanner">
+  <div class="inventory-scan-card">
+    <h2>Live Inventory Scanner</h2>
+    <div id="ppaiInventoryProgress" class="inventory-progress">Next: Tiles 29–31</div>
+
+    <div class="inventory-camera-wrap">
+      <video id="ppaiInventoryVideo" playsinline muted></video>
+      <div class="inventory-guides">
+        <div class="inventory-guide x"><span>X</span><div class="inventory-occlusion"></div></div>
+        <div class="inventory-guide y"><span>Y</span><div class="inventory-occlusion"></div></div>
+        <div class="inventory-guide z"><span>Z</span><div class="inventory-occlusion"></div></div>
+      </div>
+    </div>
+
+    <div class="inventory-live-results">
+      <div id="ppaiInventoryResultX" class="inventory-result"><div class="slot">X</div><div class="guess">Align tile</div><div class="status">waiting</div></div>
+      <div id="ppaiInventoryResultY" class="inventory-result"><div class="slot">Y</div><div class="guess">Align tile</div><div class="status">waiting</div></div>
+      <div id="ppaiInventoryResultZ" class="inventory-result"><div class="slot">Z</div><div class="guess">Align tile</div><div class="status">waiting</div></div>
+    </div>
+
+    <div class="inventory-live-note">
+      Align the <strong>emoji circles</strong> with X/Y/Z. X and Y are intentionally recognized with right-side masks because the real cards are partially covered. The scanner checks several frames per second and only enables Accept after all three predictions are stable.
+    </div>
+
+    <div id="ppaiInventoryStatus" class="inventory-status">Camera is not running.</div>
+
+    <div class="inventory-action-row">
+      <button id="ppaiInventoryAccept" class="inventory-accept" type="button" disabled>Accept 29–31</button>
+      <button id="ppaiInventoryResetStability" class="inventory-restart" type="button">Reset Guesses</button>
+      <button id="ppaiInventoryClose" class="inventory-close" type="button">Close</button>
+    </div>
+
+    <canvas id="ppaiInventoryWorkCanvas" width="720" height="720" hidden></canvas>
+  </div>
+</div>
+
 <div id="ppaiScanDialog" class="scan-dialog" hidden role="dialog" aria-modal="true" aria-label="Scan Pyramid">
   <div class="scan-card">
     <h2>Scan Pyramid — Camera Test</h2>
@@ -173,7 +239,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.11.1'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.12.0'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
@@ -217,6 +283,61 @@ window.ppaiApplyRecognizedPyramid=function(results){
   recalc();
   updateStatus('Pyramid scan applied: Tiles 1–28 filled. Next input: Tile 29 of 52.');
   return true;
+};
+
+
+window.ppaiGetInventoryScanState=function(){
+  const pyramidComplete=Array.from({length:28},(_,i)=>i+1).every(id=>!!normalizeEmoji(tileData[id]));
+  recalc();
+  return {
+    pyramidComplete,
+    currentTile,
+    nextTile:currentTile,
+    complete:currentTile>52
+  };
+};
+
+window.ppaiApplyInventoryTriplet=function(values){
+  if(!Array.isArray(values)||values.length!==3){
+    updateStatus('Inventory scanner did not provide exactly 3 tiles.');
+    return {ok:false,message:'Expected exactly three inventory tiles.'};
+  }
+  recalc();
+  if(currentTile<29){
+    return {ok:false,message:'Fill Pyramid Tiles 1–28 before scanning inventory.'};
+  }
+  if(currentTile>52){
+    return {ok:false,message:'All 52 tiles are already filled.'};
+  }
+  const validStarts=new Set([29,32,35,38,41,44,47,50]);
+  if(!validStarts.has(currentTile)){
+    return {ok:false,message:`Inventory scan expects a 3-tile group boundary, but the next empty tile is ${currentTile}.`};
+  }
+  if(currentTile+2>52){
+    return {ok:false,message:'Not enough inventory slots remain for a group of three.'};
+  }
+
+  const start=currentTile;
+  const clean=values.map(normalizeEmoji);
+  if(clean.some(v=>!v)){
+    return {ok:false,message:'One or more inventory recognitions are invalid.'};
+  }
+
+  clean.forEach((emoji,i)=>{
+    const id=start+i;
+    tileData[id]=emoji;
+    setTileValue(id,emoji);
+  });
+  clearTileSelection();
+  recalc();
+
+  const end=start+2;
+  if(currentTile>52){
+    updateStatus(`Inventory scan applied: Tiles ${start}–${end}. All 52 tiles are filled.`);
+  }else{
+    updateStatus(`Inventory scan applied: Tiles ${start}–${end}. Next input: Tile ${currentTile} of 52.`);
+  }
+  return {ok:true,start,end,nextTile:currentTile,complete:currentTile>52};
 };
 
 function boardHasData(){return Object.values(tileData).some(normalizeEmoji)}
@@ -267,5 +388,6 @@ refreshHints();renderDemoLibrary();setFileStatus();document.getElementById('memo
 <script src="js/opencv-loader.js?v=1"></script>
 <script src="js/pyramid-reference.js?v=1"></script>
 <script src="js/ppai-scan.js?v=1"></script>
+<script src="js/ppai-inventory-scan.js?v=1"></script>
 
 </body></html>
