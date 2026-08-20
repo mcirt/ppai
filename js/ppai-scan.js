@@ -11,6 +11,11 @@
   const retakeButton = byId("ppaiRetakeButton");
   const keepButton = byId("ppaiKeepCaptureButton");
   const detectButton = byId("ppaiDetectGeometryButton");
+  const recognizeButton = byId("ppaiRecognizePyramidButton");
+  const applyRecognitionButton = byId("ppaiApplyRecognitionButton");
+  const recognitionPanel = byId("ppaiRecognitionPanel");
+  const recognitionGrid = byId("ppaiRecognitionGrid");
+  const recognitionNote = byId("ppaiRecognitionNote");
   const previewPanel = byId("ppaiPreviewPanel");
   const cameraPanel = byId("ppaiCameraPanel");
   const canvas = byId("ppaiCaptureCanvas");
@@ -23,6 +28,8 @@
   let cvReady = false;
   let captured = false;
   let lastGeometry = null;
+  let lastRecognition = null;
+  let emojiReferenceDescriptors = null;
   let originalCapturedImageData = null;
   let originalPhotoCanvas = null;
 
@@ -65,6 +72,10 @@
     stopCamera();
     captured = false;
     lastGeometry = null;
+    lastRecognition = null;
+    if(recognizeButton) recognizeButton.disabled=true;
+    if(applyRecognitionButton) applyRecognitionButton.disabled=true;
+    if(recognitionPanel) recognitionPanel.hidden=true;
     originalCapturedImageData = null;
     originalPhotoCanvas = null;
     keepButton.disabled = true;
@@ -137,6 +148,10 @@
 
     captured = true;
     lastGeometry = null;
+    lastRecognition = null;
+    if(recognizeButton) recognizeButton.disabled=true;
+    if(applyRecognitionButton) applyRecognitionButton.disabled=true;
+    if(recognitionPanel) recognitionPanel.hidden=true;
     keepButton.disabled = true;
     stopCamera();
     cameraPanel.hidden = true;
@@ -453,6 +468,10 @@
         drawGeometryOverlay(g);
         setGeometrySummary(geometryHtml(g),g.locked?"good":(g.quality==="warn"?"warn":"bad"));
         keepButton.disabled=!g.locked;
+        if(recognizeButton) recognizeButton.disabled=!g.locked;
+        if(applyRecognitionButton) applyRecognitionButton.disabled=true;
+        lastRecognition=null;
+        if(recognitionPanel) recognitionPanel.hidden=!g.locked;
 
         if(g.locked) {
           try {
@@ -477,6 +496,291 @@
   }
 
 
+
+  function loadImage(url) {
+    return new Promise((resolve,reject)=>{
+      const img=new Image();
+      img.onload=()=>resolve(img);
+      img.onerror=()=>reject(new Error(`Could not load ${url}`));
+      img.src=url;
+    });
+  }
+
+  function canvasFromImage(img,size=72) {
+    const c=document.createElement("canvas");
+    c.width=size; c.height=size;
+    const ctx=c.getContext("2d",{willReadFrequently:true});
+    ctx.clearRect(0,0,size,size);
+
+    const sw=img.naturalWidth||img.width;
+    const sh=img.naturalHeight||img.height;
+    const side=Math.min(sw,sh);
+    const sx=(sw-side)/2, sy=(sh-side)/2;
+    ctx.drawImage(img,sx,sy,side,side,0,0,size,size);
+    return c;
+  }
+
+  function cropCircleFromPhoto(sourceCanvas,center,size=72) {
+    const c=document.createElement("canvas");
+    c.width=size; c.height=size;
+    const ctx=c.getContext("2d",{willReadFrequently:true});
+
+    // Use the INNER emblem area. The outer metal/card frame hurts recognition.
+    const cropR=center.r*0.79;
+    const side=cropR*2;
+    ctx.drawImage(
+      sourceCanvas,
+      center.x-cropR,center.y-cropR,side,side,
+      0,0,size,size
+    );
+    return c;
+  }
+
+  function rgbToHsv(r,g,b) {
+    r/=255; g/=255; b/=255;
+    const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+    let h=0;
+    if(d!==0){
+      if(max===r)h=((g-b)/d)%6;
+      else if(max===g)h=(b-r)/d+2;
+      else h=(r-g)/d+4;
+      h*=60;if(h<0)h+=360;
+    }
+    const s=max===0?0:d/max;
+    return [h,s,max];
+  }
+
+  function descriptorFromCanvas(c) {
+    const size=c.width;
+    const ctx=c.getContext("2d",{willReadFrequently:true});
+    const img=ctx.getImageData(0,0,size,size).data;
+
+    const hueBins=new Float32Array(18);
+    const satBins=new Float32Array(4);
+    const valBins=new Float32Array(4);
+
+    // 14x14 luminance and chroma maps.
+    const grid=14;
+    const lum=new Float32Array(grid*grid);
+    const red=new Float32Array(grid*grid);
+    const green=new Float32Array(grid*grid);
+    const blue=new Float32Array(grid*grid);
+    const count=new Float32Array(grid*grid);
+
+    let weightTotal=0;
+    const center=(size-1)/2;
+    const maxR=size*0.46;
+
+    for(let y=0;y<size;y++){
+      for(let x=0;x<size;x++){
+        const dx=x-center,dy=y-center;
+        if(Math.hypot(dx,dy)>maxR)continue;
+        const i=(y*size+x)*4;
+        const a=img[i+3]/255;
+        if(a<0.1)continue;
+        const R=img[i],G=img[i+1],B=img[i+2];
+        const [h,s,v]=rgbToHsv(R,G,B);
+
+        // Saturated/colorful pixels carry more identity than neutral ring glare.
+        const w=a*(0.25+0.75*s)*(0.35+0.65*v);
+        hueBins[Math.min(17,Math.floor(h/20))]+=w;
+        satBins[Math.min(3,Math.floor(s*4))]+=a;
+        valBins[Math.min(3,Math.floor(v*4))]+=a;
+        weightTotal+=w;
+
+        const gx=Math.min(grid-1,Math.floor(x/size*grid));
+        const gy=Math.min(grid-1,Math.floor(y/size*grid));
+        const gi=gy*grid+gx;
+        lum[gi]+=0.299*R+0.587*G+0.114*B;
+        red[gi]+=R;green[gi]+=G;blue[gi]+=B;count[gi]+=1;
+      }
+    }
+
+    function normalizeHist(a){
+      const s=a.reduce((p,v)=>p+v,0)||1;
+      for(let i=0;i<a.length;i++)a[i]/=s;
+    }
+    normalizeHist(hueBins);normalizeHist(satBins);normalizeHist(valBins);
+
+    for(let i=0;i<lum.length;i++){
+      const n=count[i]||1;
+      lum[i]/=n;red[i]/=n;green[i]/=n;blue[i]/=n;
+    }
+
+    // Normalize luminance map to remove camera brightness differences.
+    const vals=[...lum].filter(v=>v>0);
+    const mean=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+    const std=Math.sqrt((vals.length?vals.reduce((s,v)=>s+(v-mean)*(v-mean),0)/vals.length:0))||1;
+    for(let i=0;i<lum.length;i++)lum[i]=(lum[i]-mean)/std;
+
+    // Normalize RGB chroma vector per grid cell.
+    const chroma=new Float32Array(grid*grid*3);
+    for(let i=0;i<grid*grid;i++){
+      const sum=red[i]+green[i]+blue[i]+1e-6;
+      chroma[i*3]=red[i]/sum;
+      chroma[i*3+1]=green[i]/sum;
+      chroma[i*3+2]=blue[i]/sum;
+    }
+
+    return {hueBins,satBins,valBins,lum,chroma};
+  }
+
+  function cosineSimilarity(a,b) {
+    let dot=0,aa=0,bb=0;
+    const n=Math.min(a.length,b.length);
+    for(let i=0;i<n;i++){
+      dot+=a[i]*b[i];aa+=a[i]*a[i];bb+=b[i]*b[i];
+    }
+    if(!aa||!bb)return 0;
+    return dot/Math.sqrt(aa*bb);
+  }
+
+  function histogramIntersection(a,b) {
+    let s=0;
+    const n=Math.min(a.length,b.length);
+    for(let i=0;i<n;i++)s+=Math.min(a[i],b[i]);
+    return s;
+  }
+
+  function descriptorSimilarity(a,b) {
+    const hue=histogramIntersection(a.hueBins,b.hueBins);
+    const sat=histogramIntersection(a.satBins,b.satBins);
+    const val=histogramIntersection(a.valBins,b.valBins);
+    const lum=(cosineSimilarity(a.lum,b.lum)+1)/2;
+    const chroma=cosineSimilarity(a.chroma,b.chroma);
+
+    // Color identifies the family; normalized structure separates family members.
+    return hue*0.40 + chroma*0.25 + lum*0.25 + sat*0.06 + val*0.04;
+  }
+
+  async function ensureEmojiReferences() {
+    if(emojiReferenceDescriptors)return emojiReferenceDescriptors;
+
+    const refs=[];
+    for(let i=1;i<=18;i++){
+      const key=`emoji${i}`;
+      const url=`images/${key}.png`;
+      const img=await loadImage(url);
+      const c=canvasFromImage(img,72);
+      refs.push({
+        emoji:key,
+        url,
+        descriptor:descriptorFromCanvas(c)
+      });
+    }
+    emojiReferenceDescriptors=refs;
+    return refs;
+  }
+
+  function recognitionConfidence(best,second) {
+    const margin=Math.max(0,best-second);
+    // Relative confidence is deliberately conservative.
+    const conf=Math.max(0,Math.min(1,0.45 + margin*4.2 + (best-0.55)*0.9));
+    return conf;
+  }
+
+  async function recognizePyramidTiles() {
+    if(!lastGeometry || !lastGeometry.locked || !originalPhotoCanvas){
+      setGeometrySummary("Lock the pyramid template before recognition.","bad");
+      return;
+    }
+
+    recognizeButton.disabled=true;
+    applyRecognitionButton.disabled=true;
+    recognitionPanel.hidden=false;
+    recognitionGrid.innerHTML="";
+    recognitionNote.textContent="Loading emoji references and classifying Tiles 1–28…";
+
+    try {
+      const refs=await ensureEmojiReferences();
+      const results=[];
+
+      for(const center of lastGeometry.centers){
+        const crop=cropCircleFromPhoto(originalPhotoCanvas,center,72);
+        const desc=descriptorFromCanvas(crop);
+
+        const ranked=refs.map(ref=>({
+          emoji:ref.emoji,
+          url:ref.url,
+          score:descriptorSimilarity(desc,ref.descriptor)
+        })).sort((a,b)=>b.score-a.score);
+
+        const best=ranked[0],second=ranked[1];
+        const confidence=recognitionConfidence(best.score,second.score);
+
+        results.push({
+          tileId:center.tileId,
+          emoji:best.emoji,
+          score:best.score,
+          secondEmoji:second.emoji,
+          secondScore:second.score,
+          confidence
+        });
+      }
+
+      lastRecognition=results;
+      renderRecognitionResults(results);
+
+      const weak=results.filter(r=>r.confidence<0.62).length;
+      const medium=results.filter(r=>r.confidence>=0.62&&r.confidence<0.78).length;
+      recognitionNote.textContent=
+        weak===0
+        ? `Recognition complete. ${medium ? `${medium} tile(s) are medium-confidence; review them before applying.` : "All 28 are high-confidence."}`
+        : `Recognition complete. ${weak} low-confidence tile(s) need review. Nothing is applied until you press Apply Tiles 1–28.`;
+
+      applyRecognitionButton.disabled=false;
+    } catch(error) {
+      console.error(error);
+      recognitionNote.textContent=`Recognition failed: ${error.message||error}`;
+      lastRecognition=null;
+    } finally {
+      recognizeButton.disabled=false;
+    }
+  }
+
+  function renderRecognitionResults(results) {
+    recognitionGrid.innerHTML="";
+    for(const r of results){
+      const item=document.createElement("div");
+      item.className="recognition-item "+(r.confidence>=0.78?"good":r.confidence>=0.62?"warn":"bad");
+
+      const img=document.createElement("img");
+      img.src=`images/${r.emoji}.png`;
+      img.alt=r.emoji;
+
+      const label=document.createElement("div");
+      label.textContent=`${r.tileId}: ${r.emoji.replace("emoji","E")}`;
+
+      const confidence=document.createElement("div");
+      confidence.className="recognition-confidence";
+      confidence.textContent=`${Math.round(r.confidence*100)}%`;
+
+      item.append(img,label,confidence);
+      recognitionGrid.appendChild(item);
+    }
+  }
+
+  function applyRecognizedPyramid() {
+    if(!lastRecognition || lastRecognition.length!==28){
+      recognitionNote.textContent="Run recognition first.";
+      return;
+    }
+    if(typeof window.ppaiApplyRecognizedPyramid!=="function"){
+      recognitionNote.textContent="The input-board apply hook is unavailable.";
+      return;
+    }
+
+    const weak=lastRecognition.filter(r=>r.confidence<0.62);
+    const ok=window.ppaiApplyRecognizedPyramid(lastRecognition);
+    if(ok){
+      recognitionNote.textContent=
+        weak.length
+        ? `Applied Tiles 1–28. ${weak.length} low-confidence result(s) are highlighted above; use the normal index tile editor to correct them if needed.`
+        : "Applied Tiles 1–28. Sequential input now continues at Tile 29.";
+      applyRecognitionButton.disabled=true;
+    }
+  }
+
   function closeDialog() {
     stopCamera();
     dialog.hidden=true;
@@ -493,7 +797,7 @@
     }
     closeDialog();
     const status=byId("status");
-    if(status)status.textContent="Pyramid geometry captured: 28 template positions mapped after screen perspective correction. Next phase: emoji recognition for Tiles 1–28.";
+    if(status)status.textContent="Pyramid geometry captured. Use Recognize Tiles 1–28, then apply the reviewed results to continue sequential input at Tile 29.";
   }
 
   function markCvReady() {
@@ -506,7 +810,7 @@
       return;
     }
     cvReady=true;
-    setCvStatus("OpenCV ready — direct static pyramid reference registration available.","ready");
+    setCvStatus("OpenCV ready — direct template registration + pyramid recognition available.","ready");
   }
 
   function markCvError(message) {
@@ -522,6 +826,8 @@
   openButton?.addEventListener("click",async()=>{dialog.hidden=false;await startCamera();});
   captureButton?.addEventListener("click",captureFrame);
   detectButton?.addEventListener("click",runDirectTemplateRegistration);
+  recognizeButton?.addEventListener("click",recognizePyramidTiles);
+  applyRecognitionButton?.addEventListener("click",applyRecognizedPyramid);
   stopButton?.addEventListener("click",stopCamera);
   closeButton?.addEventListener("click",closeDialog);
   retakeButton?.addEventListener("click",retake);
