@@ -39,13 +39,12 @@
 .geometry-chip{padding:4px 5px;border:1px solid #ccd4dc;border-radius:5px;background:#fff;text-align:center;font-size:11px}
 
 
-.scan-corner-help{margin-top:6px;font-size:12px;color:#555}
 
 </style>
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.10.9 — Static Reference Registration</div>
+<div class="version">PPAI JS v0.11.0 — Direct Pyramid Template Registration</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
@@ -55,7 +54,7 @@
 
 <div class="scan-panel">
   <h2>Camera Input</h2>
-  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.10.9 uses the supplied straight-on game screenshot as the canonical pyramid reference. After screen rectification, OpenCV registers the photographed board against the exact static 28-circle geometry measured from that reference.</p>
+  <p><strong>Finished workflow:</strong> Pyramid first (Tiles 1–28), then Inventory (Tiles 29–52). v0.11.0 uses the supplied straight-on screenshot as the canonical pyramid reference and registers that pyramid directly against the camera photo. There is no screen-corner or perspective-rectification step.</p>
   <div class="scan-row">
     <button id="scanPyramidButton" class="scan-button" type="button">Scan Pyramid</button>
   </div>
@@ -137,11 +136,9 @@
         <canvas id="ppaiCaptureCanvas"></canvas>
       </div>
       <div id="ppaiCvProof" class="scan-proof"></div>
-      <div id="ppaiGeometrySummary" class="geometry-summary">Geometry has not been analyzed yet. v0.10.9 straightens the photographed screen, then registers it against the exact static pyramid geometry from the supplied reference screenshot.</div>
+      <div id="ppaiGeometrySummary" class="geometry-summary">Geometry has not been analyzed yet. v0.11.0 directly fits the static 28-circle pyramid template to the photographed board.</div>
       <div class="scan-row">
-        <button id="ppaiDetectGeometryButton" class="scan-button" type="button">Straighten + Detect 28 Tiles</button>
-        <button id="ppaiManualCornersButton" class="scan-button secondary" type="button">Tap 4 Screen Corners</button>
-        <button id="ppaiStraightenManualButton" class="scan-button secondary" type="button" disabled>Straighten Manual Corners</button>
+        <button id="ppaiDetectGeometryButton" class="scan-button" type="button">Detect Pyramid Template</button>
         <button id="ppaiRetakeButton" class="scan-button secondary" type="button">Retake</button>
         <button id="ppaiKeepCaptureButton" class="scan-button" type="button" disabled>Keep Aligned Pyramid</button>
       </div>
@@ -154,7 +151,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.10.9'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.11.0'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
