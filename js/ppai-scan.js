@@ -11,8 +11,6 @@
   const retakeButton = byId("ppaiRetakeButton");
   const keepButton = byId("ppaiKeepCaptureButton");
   const detectButton = byId("ppaiDetectGeometryButton");
-  const manualCornersButton = byId("ppaiManualCornersButton");
-  const straightenManualButton = byId("ppaiStraightenManualButton");
   const previewPanel = byId("ppaiPreviewPanel");
   const cameraPanel = byId("ppaiCameraPanel");
   const canvas = byId("ppaiCaptureCanvas");
@@ -27,9 +25,6 @@
   let lastGeometry = null;
   let originalCapturedImageData = null;
   let originalPhotoCanvas = null;
-  let rectifiedCanvas = null;
-  let photoCorners = [];
-  let photoCornerInputActive = false;
 
   function setCvStatus(text, kind) {
     if (!cvStatus) return;
@@ -72,11 +67,7 @@
     lastGeometry = null;
     originalCapturedImageData = null;
     originalPhotoCanvas = null;
-    rectifiedCanvas = null;
-    photoCorners = [];
-    photoCornerInputActive = false;
     keepButton.disabled = true;
-    straightenManualButton.disabled = true;
     previewPanel.hidden = true;
     cameraPanel.hidden = false;
     setScanStatus("Requesting rear-camera permission…", "working");
@@ -146,16 +137,13 @@
 
     captured = true;
     lastGeometry = null;
-    rectifiedCanvas = null;
-    photoCorners = [];
     keepButton.disabled = true;
-    straightenManualButton.disabled = true;
     stopCamera();
     cameraPanel.hidden = true;
     previewPanel.hidden = false;
 
     setGeometrySummary(
-      "<strong>Photo captured.</strong> Press <em>Straighten + Detect 28 Tiles</em>. v0.10.8 will first find the photographed display boundary, perspective-correct it, then fit the pyramid.",
+      "<strong>Photo captured.</strong> Press <em>Detect Pyramid Template</em>. v0.11.0 fits the supplied static 28-circle pyramid reference directly to this photo.",
       ""
     );
 
@@ -189,193 +177,7 @@
     }
   }
 
-  // ---- Exact FreeCell-style photo screen rectification helpers ----
-  function orderQuad(points) {
-    const sorted = [...points].sort((a,b)=>(a.x+a.y)-(b.x+b.y));
-    const tl = sorted[0];
-    const br = sorted[sorted.length-1];
-    const remaining = points.filter(p=>p!==tl && p!==br);
-    const tr = remaining.reduce((best,p)=>!best || (p.x-p.y)>(best.x-best.y)?p:best,null);
-    const bl = remaining.find(p=>p!==tr);
-    return [tl,tr,br,bl];
-  }
-
-  function quadArea(points) {
-    let area=0;
-    for(let i=0;i<4;i++) {
-      const a=points[i], b=points[(i+1)%4];
-      area += a.x*b.y - b.x*a.y;
-    }
-    return Math.abs(area)/2;
-  }
-
-  function distance(a,b) {
-    return Math.hypot(a.x-b.x,a.y-b.y);
-  }
-
-  function drawPhotoCornerReview() {
-    restoreOriginalCapture();
-    if (!photoCorners.length) return;
-    const ctx=canvas.getContext("2d");
-    const sx=canvas.width/originalPhotoCanvas.width;
-    const sy=canvas.height/originalPhotoCanvas.height;
-    const scaled=photoCorners.map(p=>({x:p.x*sx,y:p.y*sy}));
-
-    ctx.save();
-    ctx.strokeStyle="#00f0ff";
-    ctx.fillStyle="#00f0ff";
-    ctx.lineWidth=Math.max(3,canvas.width*0.004);
-    ctx.beginPath();
-    scaled.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
-    if(scaled.length===4)ctx.closePath();
-    ctx.stroke();
-
-    scaled.forEach((p,i)=>{
-      ctx.beginPath();
-      ctx.arc(p.x,p.y,Math.max(7,canvas.width*0.012),0,Math.PI*2);
-      ctx.fill();
-      ctx.fillStyle="#04142e";
-      ctx.font=`bold ${Math.max(12,canvas.width*0.018)}px Arial`;
-      ctx.textAlign="center";
-      ctx.textBaseline="middle";
-      ctx.fillText(String(i+1),p.x,p.y);
-      ctx.fillStyle="#00f0ff";
-    });
-    ctx.restore();
-  }
-
-  function detectDisplayQuadrilateral() {
-    if(!cvReady || !window.cv || !originalPhotoCanvas) {
-      throw new Error("OpenCV is not ready for screen detection.");
-    }
-
-    let src,resized,gray,blurred,edges,closed,contours,hierarchy,kernel;
-    try {
-      const cv=window.cv;
-      src=cv.imread(originalPhotoCanvas);
-      const scale=Math.min(1,1000/src.cols);
-
-      resized=new cv.Mat();
-      cv.resize(src,resized,new cv.Size(Math.round(src.cols*scale),Math.round(src.rows*scale)),0,0,cv.INTER_AREA);
-
-      gray=new cv.Mat();
-      cv.cvtColor(resized,gray,cv.COLOR_RGBA2GRAY);
-      blurred=new cv.Mat();
-      cv.GaussianBlur(gray,blurred,new cv.Size(7,7),0);
-      edges=new cv.Mat();
-      cv.Canny(blurred,edges,45,135);
-
-      closed=new cv.Mat();
-      kernel=cv.getStructuringElement(cv.MORPH_RECT,new cv.Size(9,9));
-      cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,kernel);
-
-      contours=new cv.MatVector();
-      hierarchy=new cv.Mat();
-      cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
-
-      const imageArea=resized.cols*resized.rows;
-      let best=null;
-
-      for(let i=0;i<contours.size();i++) {
-        const contour=contours.get(i);
-        try {
-          const area=Math.abs(cv.contourArea(contour));
-          if(area<imageArea*0.18) continue;
-
-          const perimeter=cv.arcLength(contour,true);
-          const approx=new cv.Mat();
-          try {
-            cv.approxPolyDP(contour,approx,perimeter*0.025,true);
-            if(approx.rows===4 && cv.isContourConvex(approx)) {
-              const points=[];
-              for(let row=0;row<4;row++) {
-                points.push({
-                  x:approx.intPtr(row,0)[0]/scale,
-                  y:approx.intPtr(row,0)[1]/scale
-                });
-              }
-              const ordered=orderQuad(points);
-              const score=area/imageArea;
-              if(!best || score>best.score) best={points:ordered,score};
-            }
-          } finally {
-            approx.delete();
-          }
-        } finally {
-          contour.delete();
-        }
-      }
-
-      if(best) {
-        photoCorners=best.points;
-        return {found:true,score:best.score};
-      }
-
-      const insetX=originalPhotoCanvas.width*0.06;
-      const insetY=originalPhotoCanvas.height*0.05;
-      photoCorners=[
-        {x:insetX,y:insetY},
-        {x:originalPhotoCanvas.width-insetX,y:insetY},
-        {x:originalPhotoCanvas.width-insetX,y:originalPhotoCanvas.height-insetY},
-        {x:insetX,y:originalPhotoCanvas.height-insetY}
-      ];
-      return {found:false,score:0};
-    } finally {
-      [kernel,hierarchy,contours,closed,edges,blurred,gray,resized,src].forEach(m=>{
-        if(m && typeof m.delete==="function")m.delete();
-      });
-    }
-  }
-
-  function rectifyPhoto() {
-    if(!cvReady || !window.cv || !originalPhotoCanvas || photoCorners.length!==4) {
-      throw new Error("Four display corners are required before straightening.");
-    }
-
-    let src,srcPoints,dstPoints,transform,warped;
-    try {
-      const cv=window.cv;
-      const pts=orderQuad(photoCorners);
-      const width=Math.max(distance(pts[0],pts[1]),distance(pts[3],pts[2]));
-      const height=Math.max(distance(pts[0],pts[3]),distance(pts[1],pts[2]));
-
-      if(width<250 || height<350 || quadArea(pts)<originalPhotoCanvas.width*originalPhotoCanvas.height*0.10) {
-        throw new Error("The selected display quadrilateral is too small.");
-      }
-
-      const targetWidth=Math.min(1080,Math.max(600,Math.round(width)));
-      const targetHeight=Math.min(2200,Math.max(900,Math.round(height)));
-
-      src=cv.imread(originalPhotoCanvas);
-      srcPoints=cv.matFromArray(4,1,cv.CV_32FC2,[
-        pts[0].x,pts[0].y,
-        pts[1].x,pts[1].y,
-        pts[2].x,pts[2].y,
-        pts[3].x,pts[3].y
-      ]);
-      dstPoints=cv.matFromArray(4,1,cv.CV_32FC2,[
-        0,0,
-        targetWidth-1,0,
-        targetWidth-1,targetHeight-1,
-        0,targetHeight-1
-      ]);
-      transform=cv.getPerspectiveTransform(srcPoints,dstPoints);
-      warped=new cv.Mat();
-      cv.warpPerspective(src,warped,transform,new cv.Size(targetWidth,targetHeight),cv.INTER_LINEAR,cv.BORDER_REPLICATE);
-
-      rectifiedCanvas=document.createElement("canvas");
-      rectifiedCanvas.width=targetWidth;
-      rectifiedCanvas.height=targetHeight;
-      cv.imshow(rectifiedCanvas,warped);
-      return rectifiedCanvas;
-    } finally {
-      [warped,transform,dstPoints,srcPoints,src].forEach(m=>{
-        if(m && typeof m.delete==="function")m.delete();
-      });
-    }
-  }
-
-  // ---- Lightweight fixed screen-normalized pyramid template ----
+  // ---- Direct static-reference pyramid registration ----
   function buildScreenTemplate(w,h,params) {
     const ref = window.PPAI_PYRAMID_REFERENCE;
     if (!ref || !ref.pyramid || !Array.isArray(ref.pyramid.tileCenters)) {
@@ -447,7 +249,7 @@
     };
   }
 
-  function fitPyramidOnRectifiedScreen(sourceCanvas) {
+  function fitPyramidOnPhoto(sourceCanvas) {
     const cv=window.cv;
     const ref=window.PPAI_PYRAMID_REFERENCE;
     if(!ref) throw new Error("Static pyramid reference is not loaded.");
@@ -455,7 +257,9 @@
     let src=null,small=null,gray=null,blurred=null,edges=null;
     try {
       src=cv.imread(sourceCanvas);
-      const targetWidth=Math.min(540,src.cols);
+
+      // Keep this light enough for iPhone Safari.
+      const targetWidth=Math.min(560,src.cols);
       const scale=targetWidth/src.cols;
       const targetHeight=Math.max(1,Math.round(src.rows*scale));
 
@@ -471,8 +275,12 @@
       const edgeData=new Uint8Array(edges.data.length);
       for(let i=0;i<edges.data.length;i++) edgeData[i]=edges.data[i]?1:0;
 
-      // Exact reference geometry. Only a compact translation/scale registration
-      // is needed after perspective rectification.
+      // Direct registration against the exact normalized geometry measured from
+      // the supplied straight-on screenshot.
+      //
+      // Because the camera photo may include bezel/background, search a broad
+      // placement/scale range — but only four transform parameters:
+      // translation X/Y and independent X/Y scale.
       const baseCx=ref.pyramid.centerX;
       const baseCy=ref.pyramid.bottomRowCenterY;
 
@@ -487,26 +295,27 @@
         if(!best || metrics.score>best.metrics.score) best=c;
       }
 
-      // Coarse registration near the exact supplied reference.
-      for(let cx=baseCx-0.045;cx<=baseCx+0.045+1e-9;cx+=0.009) {
-        for(let cy=baseCy-0.050;cy<=baseCy+0.050+1e-9;cy+=0.010) {
-          for(let sx=0.88;sx<=1.12+1e-9;sx+=0.04) {
-            for(let sy=0.88;sy<=1.12+1e-9;sy+=0.04) {
+      // Coarse direct fit. These ranges intentionally allow the pyramid to occupy
+      // a smaller/larger fraction of the photographed frame.
+      for(let cx=0.34;cx<=0.66+1e-9;cx+=0.02) {
+        for(let cy=0.42;cy<=0.68+1e-9;cy+=0.02) {
+          for(let sx=0.55;sx<=1.15+1e-9;sx+=0.06) {
+            for(let sy=0.55;sy<=1.15+1e-9;sy+=0.06) {
               evaluate(cx,cy,sx,sy);
             }
           }
         }
       }
 
-      if(!best) throw new Error("Static pyramid reference registration evaluated no candidates.");
+      if(!best) throw new Error("Static pyramid registration evaluated no candidates.");
 
-      // Fine registration around the winning transform.
+      // Fine fit around the winner.
       let refined=best;
       const b=best.template;
-      for(let cx=b.cx-0.012;cx<=b.cx+0.012+1e-9;cx+=0.003) {
-        for(let cy=b.cy-0.014;cy<=b.cy+0.014+1e-9;cy+=0.0035) {
-          for(let sx=b.sx-0.035;sx<=b.sx+0.035+1e-9;sx+=0.01) {
-            for(let sy=b.sy-0.035;sy<=b.sy+0.035+1e-9;sy+=0.01) {
+      for(let cx=b.cx-0.025;cx<=b.cx+0.025+1e-9;cx+=0.005) {
+        for(let cy=b.cy-0.025;cy<=b.cy+0.025+1e-9;cy+=0.005) {
+          for(let sx=b.sx-0.06;sx<=b.sx+0.06+1e-9;sx+=0.015) {
+            for(let sy=b.sy-0.06;sy<=b.sy+0.06+1e-9;sy+=0.015) {
               const t=buildScreenTemplate(targetWidth,targetHeight,{cx,cy,sx,sy});
               const metrics=scoreTemplate(edgeData,targetWidth,targetHeight,t);
               if(metrics.score>refined.metrics.score) refined={template:t,metrics};
@@ -516,10 +325,10 @@
       }
 
       const alternatives=candidates.filter(c=>
-        Math.abs(c.template.cx-refined.template.cx)>0.025 ||
-        Math.abs(c.template.cy-refined.template.cy)>0.030 ||
-        Math.abs(c.template.sx-refined.template.sx)>0.07 ||
-        Math.abs(c.template.sy-refined.template.sy)>0.07
+        Math.abs(c.template.cx-refined.template.cx)>0.05 ||
+        Math.abs(c.template.cy-refined.template.cy)>0.05 ||
+        Math.abs(c.template.sx-refined.template.sx)>0.12 ||
+        Math.abs(c.template.sy-refined.template.sy)>0.12
       ).sort((a,b)=>b.metrics.score-a.metrics.score);
 
       const second=alternatives[0]||null;
@@ -550,7 +359,7 @@
       }
 
       let quality="bad",locked=false;
-      if(supportedCount>=25 && bottomSupported>=6 && apexSupported && normalizedMargin>=0.012) {
+      if(supportedCount>=25 && bottomSupported>=6 && apexSupported && normalizedMargin>=0.010) {
         quality="good"; locked=true;
       } else if(supportedCount>=21 && bottomSupported>=5) {
         quality="warn";
@@ -561,7 +370,7 @@
         rowDiagnostics,normalizedMargin,
         workWidth:sourceCanvas.width,workHeight:sourceCanvas.height,
         scaleToCanvasX:1,scaleToCanvasY:1,
-        detector:"static-reference-screen-registration",
+        detector:"direct-static-reference-registration",
         referenceImage:ref.referenceImage,
         registration:{
           cx:refined.template.cx,
@@ -580,7 +389,7 @@
   }
 
   function drawGeometryOverlay(g) {
-    if(rectifiedCanvas)restoreCanvasFrom(rectifiedCanvas);
+    restoreOriginalCapture();
     const ctx=canvas.getContext("2d");
     ctx.save();
     ctx.lineWidth=Math.max(2,canvas.width/420);
@@ -612,114 +421,61 @@
     const marginPct=Math.round((g.normalizedMargin||0)*1000)/10;
 
     if(g.locked) {
-      return `<strong>SCREEN STRAIGHTENED — PYRAMID LOCKED.</strong><br>
+      return `<strong>PYRAMID TEMPLATE LOCKED.</strong><br>
         ${g.supportedCount}/28 positions supported; bottom ${g.bottomSupported}/7; apex ${g.apexSupported?"supported":"weak"}.<br>
         Best-vs-second template separation: ${marginPct}%.
         <div class="geometry-grid">${chips}</div>`;
     }
     if(g.quality==="warn") {
-      return `<strong>Screen straightened — CHECK PYRAMID ALIGNMENT.</strong><br>
+      return `<strong>Template fit found — CHECK PYRAMID ALIGNMENT.</strong><br>
         ${g.supportedCount}/28 positions supported; bottom ${g.bottomSupported}/7.
         <div class="geometry-grid">${chips}</div>`;
     }
-    return `<strong>Screen straightened, but pyramid fit is uncertain.</strong><br>
+    return `<strong>Pyramid template fit is uncertain.</strong><br>
       ${g.supportedCount}/28 positions supported; bottom ${g.bottomSupported}/7.
       <div class="geometry-grid">${chips}</div>`;
   }
 
-  function runRectificationAndTemplate(autoDetectCorners=true) {
-    if(!captured || !cvReady)return;
+  function runDirectTemplateRegistration() {
+    if(!captured || !cvReady || !originalPhotoCanvas) return;
 
     detectButton.disabled=true;
     keepButton.disabled=true;
-    setGeometrySummary("Finding the photographed display boundary and perspective-straightening it…","");
+    setGeometrySummary(
+      "Fitting the exact static pyramid reference directly to the camera photo — no four-corner or screen-rectification step…",
+      ""
+    );
 
     window.setTimeout(()=>{
       try {
-        if(autoDetectCorners) {
-          const result=detectDisplayQuadrilateral();
-          drawPhotoCornerReview();
-          if(!result.found) {
-            setGeometrySummary(
-              "No strong four-corner display was found automatically. A cyan safe inset is shown. Tap <strong>Tap 4 Screen Corners</strong> for manual correction.",
-              "warn"
-            );
-            straightenManualButton.disabled=false;
-            return;
+        const g=fitPyramidOnPhoto(originalPhotoCanvas);
+        lastGeometry=g;
+        drawGeometryOverlay(g);
+        setGeometrySummary(geometryHtml(g),g.locked?"good":(g.quality==="warn"?"warn":"bad"));
+        keepButton.disabled=!g.locked;
+
+        if(g.locked) {
+          try {
+            const normalized=g.centers.map(c=>({
+              tileId:c.tileId,row:c.row,col:c.col,
+              x:c.x/g.workWidth,y:c.y/g.workHeight,r:c.r/g.workWidth,
+              inferred:!!c.inferred
+            }));
+            sessionStorage.setItem("ppaiLastPyramidGeometry",JSON.stringify(normalized));
+            sessionStorage.setItem("ppaiLastPyramidCapture",originalPhotoCanvas.toDataURL("image/jpeg",0.94));
+          } catch(e) {
+            console.warn("Could not cache direct-registration result.",e);
           }
         }
-
-        rectifiedCanvas=rectifyPhoto();
-        restoreCanvasFrom(rectifiedCanvas);
-
-        setGeometrySummary("Screen straightened. Registering against the exact static pyramid geometry from the supplied reference screenshot…","");
-        window.setTimeout(()=>{
-          try {
-            const g=fitPyramidOnRectifiedScreen(rectifiedCanvas);
-            lastGeometry=g;
-            drawGeometryOverlay(g);
-            setGeometrySummary(geometryHtml(g),g.locked?"good":(g.quality==="warn"?"warn":"bad"));
-            keepButton.disabled=!g.locked;
-
-            if(g.locked) {
-              try {
-                const normalized=g.centers.map(c=>({
-                  tileId:c.tileId,row:c.row,col:c.col,
-                  x:c.x/g.workWidth,y:c.y/g.workHeight,r:c.r/g.workWidth,
-                  inferred:!!c.inferred
-                }));
-                sessionStorage.setItem("ppaiLastPyramidGeometry",JSON.stringify(normalized));
-                sessionStorage.setItem("ppaiLastRectifiedPyramid",rectifiedCanvas.toDataURL("image/jpeg",0.94));
-              } catch(e) {
-                console.warn("Could not cache rectified result.",e);
-              }
-            }
-          } catch(error) {
-            console.error(error);
-            setGeometrySummary(`Pyramid template fitting failed: ${error.message||error}`,"bad");
-          } finally {
-            detectButton.disabled=false;
-          }
-        },40);
       } catch(error) {
         console.error(error);
-        setGeometrySummary(`Screen rectification failed: ${error.message||error}`,"bad");
+        setGeometrySummary(`Direct pyramid template registration failed: ${error.message||error}`,"bad");
+      } finally {
         detectButton.disabled=false;
       }
     },40);
   }
 
-  function beginManualCorners() {
-    if(!captured || !originalPhotoCanvas)return;
-    restoreOriginalCapture();
-    photoCorners=[];
-    photoCornerInputActive=true;
-    straightenManualButton.disabled=true;
-    setGeometrySummary(
-      "<strong>Manual screen corners:</strong> tap 4 points in order: top-left, top-right, bottom-right, bottom-left.",
-      "warn"
-    );
-  }
-
-  function handleCanvasTap(event) {
-    if(!photoCornerInputActive || !originalPhotoCanvas)return;
-    const rect=canvas.getBoundingClientRect();
-    const x=(event.clientX-rect.left)*(canvas.width/rect.width);
-    const y=(event.clientY-rect.top)*(canvas.height/rect.height);
-    const sx=originalPhotoCanvas.width/canvas.width;
-    const sy=originalPhotoCanvas.height/canvas.height;
-    photoCorners.push({x:x*sx,y:y*sy});
-
-    if(photoCorners.length===4) {
-      photoCorners=orderQuad(photoCorners);
-      photoCornerInputActive=false;
-      straightenManualButton.disabled=false;
-      setGeometrySummary("Four manual display corners recorded. Review the cyan quadrilateral, then tap <strong>Straighten Manual Corners</strong>.","good");
-    } else {
-      setGeometrySummary(`${photoCorners.length}/4 screen corners recorded.`,"warn");
-    }
-    drawPhotoCornerReview();
-  }
 
   function closeDialog() {
     stopCamera();
@@ -742,11 +498,7 @@
 
   function markCvReady() {
     const cv=window.cv;
-    const required=[
-      "Mat","MatVector","imread","imshow","resize","cvtColor","GaussianBlur","Canny",
-      "getStructuringElement","morphologyEx","findContours","contourArea","arcLength",
-      "approxPolyDP","isContourConvex","matFromArray","getPerspectiveTransform","warpPerspective"
-    ];
+    const required=["Mat","imread","resize","cvtColor","GaussianBlur","Canny"];
     const missing=required.filter(name=>typeof cv?.[name]==="undefined");
     if(missing.length) {
       cvReady=false;
@@ -754,7 +506,7 @@
       return;
     }
     cvReady=true;
-    setCvStatus("OpenCV ready — screen rectification + static reference registration available.","ready");
+    setCvStatus("OpenCV ready — direct static pyramid reference registration available.","ready");
   }
 
   function markCvError(message) {
@@ -769,10 +521,7 @@
 
   openButton?.addEventListener("click",async()=>{dialog.hidden=false;await startCamera();});
   captureButton?.addEventListener("click",captureFrame);
-  detectButton?.addEventListener("click",()=>runRectificationAndTemplate(true));
-  manualCornersButton?.addEventListener("click",beginManualCorners);
-  straightenManualButton?.addEventListener("click",()=>runRectificationAndTemplate(false));
-  canvas?.addEventListener("click",handleCanvasTap);
+  detectButton?.addEventListener("click",runDirectTemplateRegistration);
   stopButton?.addEventListener("click",stopCamera);
   closeButton?.addEventListener("click",closeDialog);
   retakeButton?.addEventListener("click",retake);
