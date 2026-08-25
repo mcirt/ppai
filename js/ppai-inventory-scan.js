@@ -18,10 +18,27 @@
     Z:byId("ppaiInventoryResultZ")
   };
 
+  // The white UI guides remain generous for aiming. Recognition itself uses
+  // only the smaller inner colored disk (recognitionScale).
   const SLOT_CONFIG={
-    X:{x:0.36,y:0.53,r:0.095,maskRight:0.39},
-    Y:{x:0.50,y:0.53,r:0.095,maskRight:0.30},
-    Z:{x:0.64,y:0.53,r:0.095,maskRight:0.00}
+    X:{x:0.36,y:0.53,r:0.095,recognitionScale:0.70,softOcclusionStart:0.50,softOcclusionEnd:0.73},
+    Y:{x:0.50,y:0.53,r:0.095,recognitionScale:0.70,softOcclusionStart:0.60,softOcclusionEnd:0.82},
+    Z:{x:0.64,y:0.53,r:0.095,recognitionScale:0.70,softOcclusionStart:1.00,softOcclusionEnd:1.00}
+  };
+
+  const guideEls={
+    X:byId("ppaiInventoryGuideX"),
+    Y:byId("ppaiInventoryGuideY"),
+    Z:byId("ppaiInventoryGuideZ")
+  };
+
+  // X/Y are mechanically spaced from Z in the real-game fan. Z is the only
+  // fully exposed card, so each frame refines Z and derives X/Y from it.
+  const SLOT_STEP_X=0.14;
+  let anchoredSlots={
+    X:{x:SLOT_CONFIG.X.x,y:SLOT_CONFIG.X.y},
+    Y:{x:SLOT_CONFIG.Y.x,y:SLOT_CONFIG.Y.y},
+    Z:{x:SLOT_CONFIG.Z.x,y:SLOT_CONFIG.Z.y}
   };
 
   const FAMILY_RANGES=[
@@ -39,6 +56,8 @@
   let nextStart=29;
   let processing=false;
   let frameCounter=0;
+  const anchorCanvas=document.createElement("canvas");
+  anchorCanvas.width=120; anchorCanvas.height=120;
 
   const histories={X:[],Y:[],Z:[]};
   const current={X:null,Y:null,Z:null};
@@ -46,6 +65,12 @@
   function setStatus(text){ if(status)status.textContent=text; }
 
   function resetStability(){
+    anchoredSlots={
+      X:{x:SLOT_CONFIG.X.x,y:SLOT_CONFIG.X.y},
+      Y:{x:SLOT_CONFIG.Y.x,y:SLOT_CONFIG.Y.y},
+      Z:{x:SLOT_CONFIG.Z.x,y:SLOT_CONFIG.Z.y}
+    };
+    updateGuidePositions(false);
     for(const slot of ["X","Y","Z"]){
       histories[slot]=[];
       current[slot]=null;
@@ -114,7 +139,7 @@
       });
       video.srcObject=stream;
       await video.play();
-      setStatus("Live recognition running. Align the three emoji circles with X / Y / Z.");
+      setStatus("Live recognition running. Align Z approximately; Z anchors the X/Y/Z geometry automatically.");
       timer=setInterval(processFrame,220); // ~4.5 recognition checks/sec
     }catch(error){
       console.error(error);
@@ -144,19 +169,24 @@
     return [h,max?d/max:0,max];
   }
 
-  function slotPixelVisible(slot,nx,ny){
-    // Circle mask.
+  function slotPixelWeight(slot,nx,ny){
+    // Use an inner circular recognition ROI. A soft outer feather reduces small
+    // framing errors without letting card-body pixels dominate.
     const dx=nx-0.5,dy=ny-0.5;
-    if(Math.hypot(dx,dy)>0.47)return false;
+    const d=Math.hypot(dx,dy);
+    if(d>=0.49)return 0;
+    let weight=d<=0.43?1:(0.49-d)/0.06;
 
-    // X/Y in the real game are partially covered by the card to their right.
-    // Ignore the right wedge instead of treating occlusion as part of the emoji.
-    const blocked=SLOT_CONFIG[slot].maskRight;
-    if(blocked>0){
-      const cutoff=1-blocked;
-      if(nx>cutoff)return false;
+    // X and Y are covered from the right. Instead of a hard vertical cutoff,
+    // taper those pixels down gradually so the visible left-side shape remains
+    // useful while the covering card contributes almost nothing.
+    const cfg=SLOT_CONFIG[slot];
+    if(nx>cfg.softOcclusionStart){
+      if(nx>=cfg.softOcclusionEnd)return 0;
+      const t=(cfg.softOcclusionEnd-nx)/(cfg.softOcclusionEnd-cfg.softOcclusionStart);
+      weight*=Math.max(0,Math.min(1,t));
     }
-    return true;
+    return weight;
   }
 
   function extractDescriptor(canvas,slot){
@@ -177,11 +207,12 @@
     for(let y=0;y<size;y++){
       for(let x=0;x<size;x++){
         const nx=(x+0.5)/size,ny=(y+0.5)/size;
-        if(!slotPixelVisible(slot,nx,ny))continue;
+        const maskWeight=slotPixelWeight(slot,nx,ny);
+        if(maskWeight<=0)continue;
 
         const i=(y*size+x)*4;
-        const R=data[i],G=data[i+1],B=data[i+2],A=data[i+3]/255;
-        if(A<0.08)continue;
+        const R=data[i],G=data[i+1],B=data[i+2],A=(data[i+3]/255)*maskWeight;
+        if(A<0.03)continue;
 
         const [H,S,V]=rgbToHsv(R,G,B);
         const weight=A*(0.20+0.80*S)*(0.30+0.70*V);
@@ -204,13 +235,14 @@
     for(let y=1;y<size-1;y++){
       for(let x=1;x<size-1;x++){
         const nx=(x+0.5)/size,ny=(y+0.5)/size;
-        if(!slotPixelVisible(slot,nx,ny))continue;
+        const maskWeight=slotPixelWeight(slot,nx,ny);
+        if(maskWeight<=0)continue;
         const gxv=gray[y*size+x+1]-gray[y*size+x-1];
         const gyv=gray[(y+1)*size+x]-gray[(y-1)*size+x];
         const mag=Math.min(255,Math.hypot(gxv,gyv));
         const gx=Math.min(grid-1,Math.floor(x/size*grid));
         const gy=Math.min(grid-1,Math.floor(y/size*grid));
-        edge[gy*grid+gx]+=mag;
+        edge[gy*grid+gx]+=mag*maskWeight;
       }
     }
 
@@ -260,7 +292,8 @@
         c.width=72;c.height=72;
         const ctx=c.getContext("2d",{willReadFrequently:true});
         const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
-        const side=Math.min(sw,sh);
+        const fullSide=Math.min(sw,sh);
+        const side=fullSide*0.76;
         ctx.drawImage(img,(sw-side)/2,(sh-side)/2,side,side,0,0,72,72);
         out[slot].push({id,emoji,descriptor:extractDescriptor(c,slot)});
       }
@@ -289,7 +322,7 @@
   }
 
   function classify(desc,slot,refs){
-    if(desc.visiblePixels<500)return null;
+    if(desc.visiblePixels<360)return null;
 
     const families=familyScore(desc,refs);
     const family=families[0].family;
@@ -300,7 +333,9 @@
       const color=histIntersection(desc.hue,d.hue);
       const shape=(cosine(desc.edge,d.edge)+1)/2;
       const structure=(cosine(desc.lum,d.lum)+1)/2;
-      const score=color*0.25 + shape*0.48 + structure*0.27;
+
+      // Once the color family is selected, shape carries most of the decision.
+      const score=color*0.16 + shape*0.56 + structure*0.28;
       return {emoji:r.emoji,id:r.id,score,color,shape,structure};
     }).sort((a,b)=>b.score-a.score);
 
@@ -308,9 +343,10 @@
     const margin=Math.max(0,best.score-second.score);
     const familyMargin=Math.max(0,families[0].score-(families[1]?.score||0));
 
-    // Confidence is driven mostly by best-vs-second separation, not raw similarity.
+    // This number is intentionally conservative. Raw similarity alone cannot
+    // produce a high confidence; separation from the runner-up is required.
     const confidence=Math.max(0,Math.min(1,
-      0.38 + margin*3.6 + familyMargin*1.25 + Math.max(0,best.shape-0.55)*0.5
+      0.20 + margin*5.0 + familyMargin*1.7 + Math.max(0,best.shape-0.60)*0.55
     ));
 
     return {
@@ -318,16 +354,107 @@
       id:best.id,
       confidence,
       margin,
+      familyMargin,
       family:family.name,
-      score:best.score
+      score:best.score,
+      secondEmoji:second.emoji,
+      secondScore:second.score
     };
+  }
+
+  function meanSaturationPatch(data,w,h,cx,cy,r){
+    let sum=0,n=0;
+    const x0=Math.max(0,Math.floor(cx-r)),x1=Math.min(w-1,Math.ceil(cx+r));
+    const y0=Math.max(0,Math.floor(cy-r)),y1=Math.min(h-1,Math.ceil(cy+r));
+    for(let y=y0;y<=y1;y+=2){
+      for(let x=x0;x<=x1;x+=2){
+        const dx=x-cx,dy=y-cy;
+        if(dx*dx+dy*dy>r*r)continue;
+        const i=(y*w+x)*4;
+        const R=data[i],G=data[i+1],B=data[i+2];
+        const max=Math.max(R,G,B),min=Math.min(R,G,B);
+        const sat=max?((max-min)/max):0;
+        const lum=(R+G+B)/765;
+        // Emoji disks are saturated and not near-white card material.
+        sum+=sat*(1-Math.max(0,lum-0.82)*4);
+        n++;
+      }
+    }
+    return n?sum/n:0;
+  }
+
+  function refineZAnchor(){
+    const vw=video.videoWidth,vh=video.videoHeight;
+    if(!vw||!vh)return;
+
+    const nominalX=SLOT_CONFIG.Z.x*vw;
+    const nominalY=SLOT_CONFIG.Z.y*vh;
+    const guideR=SLOT_CONFIG.Z.r*vw;
+
+    // Read one modest patch around the nominal Z guide, then search locally for
+    // the most saturated circular disk. Z is fully visible, unlike X and Y.
+    const patchR=guideR*1.65;
+    const sx=Math.max(0,nominalX-patchR),sy=Math.max(0,nominalY-patchR);
+    const sw=Math.min(vw-sx,patchR*2),sh=Math.min(vh-sy,patchR*2);
+
+    const c=anchorCanvas,ctx=c.getContext("2d",{willReadFrequently:true});
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.drawImage(video,sx,sy,sw,sh,0,0,c.width,c.height);
+    const img=ctx.getImageData(0,0,c.width,c.height);
+    const scaleX=sw/c.width,scaleY=sh/c.height;
+
+    let best={score:-1,x:c.width/2,y:c.height/2};
+    const search=22;
+    const diskR=Math.max(10,(guideR*0.60)/scaleX);
+
+    for(let dy=-search;dy<=search;dy+=4){
+      for(let dx=-search;dx<=search;dx+=4){
+        const cx=c.width/2+dx,cy=c.height/2+dy;
+        const score=meanSaturationPatch(img.data,c.width,c.height,cx,cy,diskR);
+        if(score>best.score)best={score,x:cx,y:cy};
+      }
+    }
+
+    const refinedX=sx+best.x*scaleX;
+    const refinedY=sy+best.y*scaleY;
+    const zNormX=refinedX/vw,zNormY=refinedY/vh;
+
+    // Limit movement so a random colorful object cannot hijack the anchor.
+    const maxDx=0.045,maxDy=0.040;
+    const clampedZ={
+      x:Math.max(SLOT_CONFIG.Z.x-maxDx,Math.min(SLOT_CONFIG.Z.x+maxDx,zNormX)),
+      y:Math.max(SLOT_CONFIG.Z.y-maxDy,Math.min(SLOT_CONFIG.Z.y+maxDy,zNormY))
+    };
+
+    // Smooth over time to avoid jitter in all three derived ROIs.
+    const alpha=0.34;
+    anchoredSlots.Z.x=anchoredSlots.Z.x*(1-alpha)+clampedZ.x*alpha;
+    anchoredSlots.Z.y=anchoredSlots.Z.y*(1-alpha)+clampedZ.y*alpha;
+    anchoredSlots.Y.x=anchoredSlots.Z.x-SLOT_STEP_X;
+    anchoredSlots.Y.y=anchoredSlots.Z.y;
+    anchoredSlots.X.x=anchoredSlots.Z.x-SLOT_STEP_X*2;
+    anchoredSlots.X.y=anchoredSlots.Z.y;
+
+    updateGuidePositions(best.score>0.18);
+  }
+
+  function updateGuidePositions(anchorLocked){
+    for(const slot of ["X","Y","Z"]){
+      const el=guideEls[slot];
+      if(!el)continue;
+      el.style.left=`${anchoredSlots[slot].x*100}%`;
+      el.style.top=`${anchoredSlots[slot].y*100}%`;
+      el.classList.toggle("anchor-locked",slot==="Z"&&anchorLocked);
+    }
   }
 
   function cropSlot(slot){
     const cfg=SLOT_CONFIG[slot];
     const vw=video.videoWidth,vh=video.videoHeight;
-    const r=cfg.r*vw;
-    const cx=cfg.x*vw,cy=cfg.y*vh;
+    const guideR=cfg.r*vw;
+    const r=guideR*cfg.recognitionScale;
+    const cx=anchoredSlots[slot].x*vw;
+    const cy=anchoredSlots[slot].y*vh;
 
     const c=workCanvas;
     c.width=72;c.height=72;
@@ -339,20 +466,27 @@
 
   function updateHistory(slot,prediction){
     const h=histories[slot];
-    if(!prediction){
-      h.push(null);
-    }else{
-      h.push(prediction);
-    }
-    if(h.length>6)h.shift();
+    h.push(prediction||null);
+    if(h.length>8)h.shift();
 
-    const valid=h.filter(Boolean);
-    const last3=valid.slice(-3);
-    const stable=last3.length===3 &&
-      last3.every(p=>p.emoji===last3[0].emoji) &&
-      last3.every(p=>p.confidence>=0.56);
+    const last4=h.slice(-4);
+    const sameFour=last4.length===4 &&
+      last4.every(Boolean) &&
+      last4.every(p=>p.emoji===last4[0].emoji);
 
-    current[slot]=prediction?{...prediction,stable}:null;
+    // Temporal repetition alone is not enough. Every contributing frame must
+    // clearly beat the second-best shape and the second-best color family.
+    const marginFloor=slot==="X"?0.030:slot==="Y"?0.038:0.045;
+    const strongEnough=sameFour &&
+      last4.every(p=>p.margin>=marginFloor) &&
+      last4.every(p=>p.familyMargin>=0.020) &&
+      last4.every(p=>p.confidence>=0.60);
+
+    const avgMargin=last4.filter(Boolean).length
+      ? last4.filter(Boolean).reduce((s,p)=>s+p.margin,0)/last4.filter(Boolean).length
+      : 0;
+
+    current[slot]=prediction?{...prediction,stable:strongEnough,avgMargin}:null;
   }
 
   function renderSlot(slot,p){
@@ -370,7 +504,8 @@
       `<div class="slot">${slot}</div>`+
       `<img src="images/${p.emoji}.png" alt="${p.emoji}">`+
       `<div class="guess">${p.emoji.replace("emoji","E")} · ${p.family}</div>`+
-      `<div class="status">${p.stable?"STABLE":`checking · ${Math.round(p.confidence*100)}%`}</div>`;
+      `<div class="status">${p.stable?"STABLE":`checking · ${Math.round(p.confidence*100)}%`}</div>`+
+      `<div class="margin">runner-up ${p.secondEmoji.replace("emoji","E")} · Δ ${p.margin.toFixed(3)}</div>`;
   }
 
   async function processFrame(){
@@ -379,6 +514,7 @@
 
     try{
       const refs=await ensureReferences();
+      refineZAnchor();
       for(const slot of ["X","Y","Z"]){
         const c=cropSlot(slot);
         const desc=extractDescriptor(c,slot);
@@ -394,7 +530,7 @@
       if(allStable){
         setStatus(`Stable: X=${current.X.emoji}, Y=${current.Y.emoji}, Z=${current.Z.emoji}. Ready to accept Tiles ${nextStart}–${nextStart+2}.`);
       }else{
-        setStatus("Live recognition running. Hold the camera steady until X, Y and Z all show STABLE.");
+        setStatus("Live recognition running. Z is anchoring the triplet; STABLE now requires 4 matching frames plus clear runner-up separation.");
       }
     }catch(error){
       console.error(error);
