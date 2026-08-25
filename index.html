@@ -82,6 +82,10 @@
 .inventory-status{max-width:650px;margin:7px auto 0;padding:7px;border-radius:7px;background:#f1f4f7;font-size:12px;font-weight:700}
 @media(max-width:520px){.inventory-guide{width:21%}.inventory-guide.x{left:35%}.inventory-guide.z{left:65%}.inventory-action-row button{flex:1 1 120px}}
 
+
+.inventory-guide.anchor-locked{border-color:#56efff;box-shadow:0 0 0 2px rgba(0,0,0,.35),0 0 15px rgba(86,239,255,.75)}
+.inventory-result .margin{font-size:10px;color:#666;margin-top:2px}
+
 </style>
 </head>
 <body>
@@ -168,9 +172,9 @@
     <div class="inventory-camera-wrap">
       <video id="ppaiInventoryVideo" playsinline muted></video>
       <div class="inventory-guides">
-        <div class="inventory-guide x"><span>X</span><div class="inventory-occlusion"></div></div>
-        <div class="inventory-guide y"><span>Y</span><div class="inventory-occlusion"></div></div>
-        <div class="inventory-guide z"><span>Z</span><div class="inventory-occlusion"></div></div>
+        <div id="ppaiInventoryGuideX" class="inventory-guide x"><span>X</span><div class="inventory-occlusion"></div></div>
+        <div id="ppaiInventoryGuideY" class="inventory-guide y"><span>Y</span><div class="inventory-occlusion"></div></div>
+        <div id="ppaiInventoryGuideZ" class="inventory-guide z"><span>Z</span><div class="inventory-occlusion"></div></div>
       </div>
     </div>
 
@@ -181,7 +185,7 @@
     </div>
 
     <div class="inventory-live-note">
-      Align the <strong>emoji circles</strong> with X/Y/Z. X and Y are intentionally recognized with right-side masks because the real cards are partially covered. The scanner checks several frames per second and only enables Accept after all three predictions are stable.
+      Align the <strong>emoji circles</strong> approximately with X/Y/Z. The scanner now uses the fully visible Z circle as a live anchor, derives X and Y from Z, crops a smaller inner emoji disk, and uses soft X/Y occlusion masks. Accept requires both repeated agreement and a clear best-vs-second match.
     </div>
 
     <div id="ppaiInventoryStatus" class="inventory-status">Camera is not running.</div>
@@ -239,7 +243,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.12.0'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.12.2'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
