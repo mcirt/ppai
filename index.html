@@ -86,6 +86,15 @@
 .inventory-guide.anchor-locked{border-color:#56efff;box-shadow:0 0 0 2px rgba(0,0,0,.35),0 0 15px rgba(86,239,255,.75)}
 .inventory-result .margin{font-size:10px;color:#666;margin-top:2px}
 
+
+#ppaiInventoryPhotoCanvas,#ppaiInventoryOverlayCanvas{
+  display:block;width:100%;height:auto;max-height:69vh;object-fit:contain;background:#000
+}
+.inventory-photo-detected{border:2px solid #36d37e}
+.inventory-result.low{border-color:#d2a340;background:#fff8e3}
+.inventory-result.high{border-color:#5dbd76;background:#eef9f1}
+.inventory-result .runner{font-size:10px;color:#666;margin-top:2px}
+
 </style>
 </head>
 <body>
@@ -100,9 +109,9 @@
 
 <div class="scan-panel">
   <h2>Camera Input</h2>
-  <p><strong>Recommended workflow:</strong> enter Pyramid Tiles 1–28 manually, then use <strong>Live Scan Inventory</strong>. The live scanner starts with Tiles 29–31 and continues in groups of three through Tiles 50–52.</p>
+  <p><strong>Recommended workflow:</strong> enter Pyramid Tiles 1–28 manually, then use <strong>Scan Inventory Photo</strong>. Take one photo containing the three visible inventory cards; OpenCV finds the three emoji circles automatically and assigns X/Y/Z from left to right.</p>
   <div class="scan-row">
-    <button id="scanInventoryButton" class="scan-button" type="button" onclick="if(window.ppaiOpenInventoryScanner){window.ppaiOpenInventoryScanner();}else{alert('Inventory scanner script did not load. Refresh the page and try again.');}">Live Scan Inventory</button>
+    <button id="scanInventoryButton" class="scan-button" type="button" onclick="if(window.ppaiOpenInventoryScanner){window.ppaiOpenInventoryScanner();}else{alert('Inventory scanner script did not load. Refresh the page and try again.');}">Scan Inventory Photo</button>
     <button id="scanPyramidButton" class="scan-button secondary" type="button">Pyramid Scanner (Experimental)</button>
   </div>
   <div id="opencvStatus" class="opencv-status working" role="status">Loading OpenCV…</div>
@@ -164,39 +173,36 @@
 
 
 
-<div id="ppaiInventoryDialog" class="inventory-scan-dialog" hidden role="dialog" aria-modal="true" aria-label="Live Inventory Scanner">
+
+<div id="ppaiInventoryDialog" class="inventory-scan-dialog" hidden role="dialog" aria-modal="true" aria-label="Inventory Photo Scanner">
   <div class="inventory-scan-card">
-    <h2>Live Inventory Scanner</h2>
+    <h2>Inventory Photo Scanner</h2>
     <div id="ppaiInventoryProgress" class="inventory-progress">Next: Tiles 29–31</div>
 
     <div class="inventory-camera-wrap">
       <video id="ppaiInventoryVideo" playsinline muted></video>
-      <div class="inventory-guides">
-        <div id="ppaiInventoryGuideX" class="inventory-guide x"><span>X</span><div class="inventory-occlusion"></div></div>
-        <div id="ppaiInventoryGuideY" class="inventory-guide y"><span>Y</span><div class="inventory-occlusion"></div></div>
-        <div id="ppaiInventoryGuideZ" class="inventory-guide z"><span>Z</span><div class="inventory-occlusion"></div></div>
-      </div>
-    </div>
-
-    <div class="inventory-live-results">
-      <div id="ppaiInventoryResultX" class="inventory-result"><div class="slot">X</div><div class="guess">Align tile</div><div class="status">waiting</div></div>
-      <div id="ppaiInventoryResultY" class="inventory-result"><div class="slot">Y</div><div class="guess">Align tile</div><div class="status">waiting</div></div>
-      <div id="ppaiInventoryResultZ" class="inventory-result"><div class="slot">Z</div><div class="guess">Align tile</div><div class="status">waiting</div></div>
+      <canvas id="ppaiInventoryPhotoCanvas" hidden></canvas>
+      <canvas id="ppaiInventoryOverlayCanvas" hidden></canvas>
     </div>
 
     <div class="inventory-live-note">
-      Align the <strong>emoji circles</strong> approximately with X/Y/Z. The scanner now uses the fully visible Z circle as a live anchor, derives X and Y from Z, crops a smaller inner emoji disk, and uses soft X/Y occlusion masks. Accept requires both repeated agreement and a clear best-vs-second match.
+      Frame the <strong>three inventory cards</strong> so their circular emoji graphics are visible. No X/Y/Z alignment template is required. After capture, OpenCV finds the three circles automatically, sorts them left-to-right as X/Y/Z, crops them, and recognizes the emojis.
     </div>
 
     <div id="ppaiInventoryStatus" class="inventory-status">Camera is not running.</div>
 
-    <div class="inventory-action-row">
-      <button id="ppaiInventoryAccept" class="inventory-accept" type="button" disabled>Accept 29–31</button>
-      <button id="ppaiInventoryResetStability" class="inventory-restart" type="button">Reset Guesses</button>
-      <button id="ppaiInventoryClose" class="inventory-close" type="button">Close</button>
+    <div id="ppaiInventoryResults" class="inventory-live-results" hidden>
+      <div id="ppaiInventoryResultX" class="inventory-result"><div class="slot">X</div><div class="guess">—</div><div class="status">waiting</div></div>
+      <div id="ppaiInventoryResultY" class="inventory-result"><div class="slot">Y</div><div class="guess">—</div><div class="status">waiting</div></div>
+      <div id="ppaiInventoryResultZ" class="inventory-result"><div class="slot">Z</div><div class="guess">—</div><div class="status">waiting</div></div>
     </div>
 
-    <canvas id="ppaiInventoryWorkCanvas" width="720" height="720" hidden></canvas>
+    <div class="inventory-action-row">
+      <button id="ppaiInventoryCapture" class="inventory-accept" type="button">Capture 3 Inventory Tiles</button>
+      <button id="ppaiInventoryRetake" class="inventory-restart" type="button" disabled>Retake</button>
+      <button id="ppaiInventoryAccept" class="inventory-accept" type="button" disabled>Accept 29–31</button>
+      <button id="ppaiInventoryClose" class="inventory-close" type="button">Close</button>
+    </div>
   </div>
 </div>
 
@@ -243,7 +249,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.12.2'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.13.0'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';

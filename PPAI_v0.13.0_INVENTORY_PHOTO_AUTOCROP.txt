@@ -1,0 +1,83 @@
+PPAI JS v0.13.0 — INVENTORY PHOTO AUTO-CROP
+
+PIVOT
+-----
+The 3-circle live alignment template is removed.
+
+New workflow:
+1. Tiles 1–28 are already filled manually.
+2. Tap Scan Inventory Photo.
+3. Frame the three visible inventory cards naturally.
+4. Tap Capture 3 Inventory Tiles.
+5. OpenCV automatically finds the three circular emoji emblems.
+6. The three circles are sorted left-to-right as X / Y / Z.
+7. The scanner crops and recognizes each emoji.
+8. Results are shown for human review.
+9. Accept is enabled after every successful recognition, even when confidence is low.
+10. Continue with 32–34, 35–37, ... 50–52.
+
+CAMERA / CANVAS / OPENCV
+------------------------
+Camera:
+navigator.mediaDevices.getUserMedia()
+
+Capture:
+HTML Canvas drawImage(video,...)
+
+OpenCV.js:
+- grayscale
+- Gaussian blur
+- Canny
+- morphology close
+- findContours
+- boundingRect
+- contourArea
+- arcLength
+- candidate filtering
+- 3-circle group selection
+
+Canvas / JavaScript:
+- crop detected X/Y/Z circles
+- extract color + edge/shape descriptors
+- compare against emoji1.png ... emoji18.png
+
+AUTOMATIC 3-CIRCLE GROUPING
+---------------------------
+The detector filters compact, near-square/circular contour candidates and then
+scores groups of three for:
+- similar radius
+- similar vertical level
+- reasonable horizontal spacing
+- balanced X/Y and Y/Z gaps
+- central placement in the captured photo
+
+The winning group is sorted left-to-right:
+left   = X
+middle = Y
+right  = Z
+
+OCCLUSION
+---------
+X and Y still use slot-specific soft right-side masks because they are partially
+covered in the real game.
+Z uses the full crop.
+
+ACCEPT BEHAVIOR
+---------------
+Accept is no longer blocked by confidence/stability.
+
+After recognition succeeds, Accept is always clickable.
+Low confidence is shown as a warning only.
+
+The human review is the final gate.
+
+SEQUENTIAL ORDER
+----------------
+29–31
+32–34
+35–37
+38–40
+41–43
+44–46
+47–49
+50–52
