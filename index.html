@@ -95,6 +95,35 @@
 .inventory-result.high{border-color:#5dbd76;background:#eef9f1}
 .inventory-result .runner{font-size:10px;color:#666;margin-top:2px}
 
+
+/* v0.13.1 compact inventory camera */
+.inventory-camera-wrap{
+  max-height:23vh !important;
+  min-height:180px;
+  overflow:hidden;
+}
+#ppaiInventoryVideo,
+#ppaiInventoryPhotoCanvas,
+#ppaiInventoryOverlayCanvas{
+  width:100%;
+  height:23vh !important;
+  max-height:23vh !important;
+  object-fit:cover !important;
+  object-position:center 46% !important;
+}
+@media(max-width:520px){
+  .inventory-camera-wrap{
+    max-height:21vh !important;
+    min-height:160px;
+  }
+  #ppaiInventoryVideo,
+  #ppaiInventoryPhotoCanvas,
+  #ppaiInventoryOverlayCanvas{
+    height:21vh !important;
+    max-height:21vh !important;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -186,7 +215,7 @@
     </div>
 
     <div class="inventory-live-note">
-      Frame the <strong>three inventory cards</strong> so their circular emoji graphics are visible. No X/Y/Z alignment template is required. After capture, OpenCV finds the three circles automatically, sorts them left-to-right as X/Y/Z, crops them, and recognizes the emojis.
+      Frame the <strong>three inventory cards</strong> so their emoji circles are visible. The scanner now uses the inventory cluster geometry: if OpenCV cannot independently prove all three circles, it locks onto the strongest visible emblem and infers the other two positions from the fixed X/Y/Z spacing.
     </div>
 
     <div id="ppaiInventoryStatus" class="inventory-status">Camera is not running.</div>
@@ -249,7 +278,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.13.0'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.13.2'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
