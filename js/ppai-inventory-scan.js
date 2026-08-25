@@ -302,6 +302,102 @@
     return [...circles].sort((a,b)=>a.x-b.x);
   }
 
+
+  function localEdgeDensity(binaryData,w,h,cx,cy,r){
+    const x0=Math.max(0,Math.floor(cx-r)),x1=Math.min(w-1,Math.ceil(cx+r));
+    const y0=Math.max(0,Math.floor(cy-r)),y1=Math.min(h-1,Math.ceil(cy+r));
+    let hit=0,n=0;
+    for(let y=y0;y<=y1;y+=2){
+      const off=y*w;
+      for(let x=x0;x<=x1;x+=2){
+        const dx=x-cx,dy=y-cy;
+        if(dx*dx+dy*dy>r*r)continue;
+        if(binaryData[off+x])hit++;
+        n++;
+      }
+    }
+    return n?hit/n:0;
+  }
+
+  function candidateStrength(c){
+    return (c.circularity||0)*0.65 + Math.min(1,(c.r||1)/45)*0.35;
+  }
+
+  function inferTripletFromAnchor(anchor,candidates,w,h){
+    // Real inventory fan geometry:
+    // Z is the most exposed rightmost tile. Y and X sit at near-constant horizontal
+    // offsets to its left and approximately the same vertical centerline.
+    //
+    // Search a modest spacing range because camera scale changes from photo to photo.
+    const stepCandidates=[];
+    const baseR=Math.max(8,anchor.r||18);
+
+    for(let step=baseR*1.45;step<=baseR*2.35;step+=baseR*0.10){
+      const inferred=[
+        {x:anchor.x-step*2,y:anchor.y,r:baseR,inferred:true},
+        {x:anchor.x-step,y:anchor.y,r:baseR,inferred:true},
+        {x:anchor.x,y:anchor.y,r:baseR,inferred:false}
+      ];
+
+      // Reject if the inferred cluster falls substantially outside the image.
+      if(inferred[0].x-baseR<0 || inferred[2].x+baseR>w)continue;
+
+      let score=0;
+
+      // Reward agreement with any actual contour candidates near inferred X/Y/Z.
+      for(const p of inferred){
+        let best=0;
+        for(const c of candidates){
+          const dist=Math.hypot(c.x-p.x,c.y-p.y);
+          const tol=Math.max(baseR,c.r)*1.15;
+          if(dist<=tol){
+            const radiusAgreement=1-Math.min(1,Math.abs(c.r-baseR)/Math.max(baseR,c.r,1));
+            const proximity=1-Math.min(1,dist/tol);
+            best=Math.max(best,proximity*0.65+radiusAgreement*0.35);
+          }
+        }
+        score+=best;
+      }
+
+      // Centering prior: typical user framing puts the triplet around the middle.
+      const clusterCx=(inferred[0].x+inferred[2].x)/2;
+      score-=Math.abs(clusterCx-w/2)/w*0.55;
+      score-=Math.abs(anchor.y-h*0.46)/h*0.35;
+
+      stepCandidates.push({circles:inferred,score});
+    }
+
+    stepCandidates.sort((a,b)=>b.score-a.score);
+    return stepCandidates[0]||null;
+  }
+
+  function chooseGeometryFallback(candidates,w,h){
+    if(!candidates.length)return null;
+
+    // Prefer a strong right-side candidate as Z, because Z is normally the fully
+    // visible card. If that is unavailable, fall back to the strongest candidate.
+    const sorted=[...candidates].sort((a,b)=>{
+      const ar=(a.x/w)*0.55 + candidateStrength(a)*0.45;
+      const br=(b.x/w)*0.55 + candidateStrength(b)*0.45;
+      return br-ar;
+    });
+
+    const anchorPool=sorted.slice(0,Math.min(6,sorted.length));
+    let best=null;
+
+    for(const anchor of anchorPool){
+      const fit=inferTripletFromAnchor(anchor,candidates,w,h);
+      if(!fit)continue;
+
+      // Bonus when the chosen anchor really is on the right side of the image.
+      const zBonus=(anchor.x/w)*0.25;
+      const score=fit.score+zBonus+candidateStrength(anchor)*0.35;
+      if(!best||score>best.score)best={circles:fit.circles,score,anchor};
+    }
+
+    return best;
+  }
+
   function chooseBestTriplet(candidates,w,h){
     if(candidates.length<3)return null;
 
@@ -418,18 +514,32 @@
         if(!duplicate)deduped.push(c);
       }
 
-      const chosen=chooseBestTriplet(deduped,targetWidth,targetHeight);
+      let chosen=chooseBestTriplet(deduped,targetWidth,targetHeight);
+      let mode="direct-3-circle";
+
       if(!chosen){
-        throw new Error(`Could not isolate a reliable 3-circle inventory group (${deduped.length} circle candidates found).`);
+        // New v0.13.2 behavior:
+        // do NOT fail merely because X/Y are partially occluded and only one or
+        // two circles survive contour filtering. Use the fixed inventory geometry.
+        chosen=chooseGeometryFallback(deduped,targetWidth,targetHeight);
+        mode="geometry-fallback";
+      }
+
+      if(!chosen){
+        throw new Error(`Could not establish the inventory cluster geometry (${deduped.length} circle candidates found).`);
       }
 
       const sx=sourceCanvas.width/targetWidth;
       const sy=sourceCanvas.height/targetHeight;
-      return chosen.circles.map(c=>({
+      const mapped=chosen.circles.map(c=>({
         x:c.x*sx,
         y:c.y*sy,
-        r:c.r*(sx+sy)/2
+        r:c.r*(sx+sy)/2,
+        inferred:!!c.inferred
       }));
+      mapped.detectionMode=mode;
+      mapped.candidateCount=deduped.length;
+      return mapped;
     }finally{
       [hierarchy,contours,kernel,closed,edges,blurred,gray,small,src].forEach(m=>{
         if(m&&typeof m.delete==="function")m.delete();
@@ -466,7 +576,7 @@
     circles.forEach((c,i)=>{
       ctx.beginPath();
       ctx.arc(c.x,c.y,c.r*0.88,0,Math.PI*2);
-      ctx.strokeStyle="#39e37a";
+      ctx.strokeStyle=c.inferred?"#ffd24a":"#39e37a";
       ctx.stroke();
 
       const badgeR=Math.max(16,overlayCanvas.width/45);
@@ -538,17 +648,21 @@
       renderResults(readings);
 
       const low=slots.filter(s=>readings[s].confidence<0.72||readings[s].margin<0.04);
+      const mode=circles.detectionMode||"direct-3-circle";
+      const modeText=mode==="geometry-fallback"
+        ? `Geometry fallback used (${circles.candidateCount||0} contour candidate(s)); X/Y/Z positions were inferred from the inventory fan.`
+        : "All three inventory circles were detected directly.";
       setStatus(
         low.length
-          ? `Recognition complete. ${low.length} tile(s) are low-confidence; review them. You may still accept if the displayed emojis are correct.`
-          : "Recognition complete. Review X/Y/Z, then accept."
+          ? `${modeText} ${low.length} tile(s) are low-confidence; review them. You may still accept if the displayed emojis are correct.`
+          : `${modeText} Review X/Y/Z, then accept.`
       );
 
       // Human review is the gate now. Accept is always enabled after a reading.
       acceptButton.disabled=false;
     }catch(error){
       console.error(error);
-      setStatus(`Inventory detection failed: ${error.message||error}. Retake with the three emoji circles larger and more centered.`);
+      setStatus(`Inventory detection failed: ${error.message||error}. Keep the three-card cluster visible and reasonably centered, then retake.`);
       lastReading=null;
       acceptButton.disabled=true;
     }finally{
