@@ -1,0 +1,40 @@
+PPAI JS v0.13.6 — VIEWFINDER CROP + INVENTORY RECOGNITION
+
+Changes from v0.13.5:
+
+1. EXACT VIEWFINDER CAPTURE
+   The short camera preview uses CSS object-fit: cover.
+   v0.13.5 photographed the entire hidden camera frame.
+   v0.13.6 calculates the exact center crop used by the visible viewfinder and
+   captures ONLY that region.
+   Result: pyramid tiles above the visible window no longer sneak into analysis.
+
+2. EMOJI READINGS CONNECTED
+   After X/Y/Z localization and normalization, each crop is compared against:
+   images/emoji1.png through images/emoji18.png
+
+   The standalone test now displays:
+   - predicted E number
+   - color family
+   - confidence
+   - runner-up emoji
+   - best-vs-second margin
+
+   Recognition is review-only and does NOT write to the solver.
+
+3. REAL-GAME LOCK TUNING
+   X is naturally occluded, so X circularity is no longer a hard lock gate.
+   Lock now emphasizes:
+   - Y/Z rim evidence
+   - radius consistency
+   - Y position geometry
+   - permanent plaque geometry support
+
+   A result like the previous test (strong 85% permanent geometry, good Y/Z,
+   weak X contour) can now lock instead of being rejected by a tiny threshold miss.
+
+4. VERSION
+   Visible version is PPAI JS v0.13.6.
+   Local cache-busting references use v0136.
+
+Core solver/game logic remains unchanged.

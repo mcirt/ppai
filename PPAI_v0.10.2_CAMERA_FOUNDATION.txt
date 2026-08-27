@@ -1,0 +1,47 @@
+PPAI JS v0.10.2 — Camera / OpenCV Foundation
+
+PURPOSE
+-------
+This is deliberately the first scanner milestone only.
+
+Finished user workflow remains:
+1. Scan Pyramid -> Tiles 1–28
+2. Scan Inventory in 8 groups of 3 -> Tiles 29–52
+
+v0.10.2 does NOT recognize or populate tiles yet.
+
+WHAT WORKS IN THIS BUILD
+------------------------
+- A Scan Pyramid button lives in index.html.
+- It opens the rear camera using the same getUserMedia pattern proven in the FreeCell project.
+- The entire pyramid only needs to be reasonably visible inside a loose guide.
+- Capture produces a still image in a canvas.
+- The exact known-good local FreeCell OpenCV build is included at js/opencv.js.
+- The OpenCV loader uses the proven custom cv.then(callback) + 100 ms Safari polling pattern.
+- It does NOT use `await cv` or resolve a Promise with cv itself.
+- After capture, OpenCV performs grayscale + Canny edge detection as a proof that the captured camera pixels reached OpenCV successfully.
+- The captured JPEG is cached in sessionStorage as ppaiLastPyramidCapture for the next geometry milestone.
+- game.html and solver.html are the working PPAI v0.10.1 files and are not strategically changed.
+
+NEXT MILESTONE
+--------------
+Use the captured still to:
+1. detect enough circular tile centers / bottom-row anchors,
+2. fit the 7-row pyramid geometry,
+3. digitally align/normalize the photographed pyramid,
+4. overlay numbered centers 1–28,
+5. only then add emoji recognition.
+
+FILES
+-----
+index.html
+game.html
+solver.html
+js/opencv.js
+js/opencv-loader.js
+js/ppai-scan.js
+
+IMPORTANT FOR GITHUB
+--------------------
+Keep js/opencv.js in the repository at exactly that path unless the loader SOURCE is also changed.
+Camera access requires HTTPS (GitHub Pages satisfies this).

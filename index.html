@@ -96,7 +96,7 @@
 .inventory-result .runner{font-size:10px;color:#666;margin-top:2px}
 
 
-/* v0.13.5 legacy-height inventory camera: deliberately short and wide */
+/* v0.13.6 legacy-height inventory camera: deliberately short and wide */
 .inventory-camera-wrap{
   height:240px !important;
   min-height:0 !important;
@@ -129,7 +129,7 @@
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.13.5 — OpenCV Init + Geometry Inventory Test</div>
+<div class="version">PPAI JS v0.13.6 — Viewfinder Crop + Inventory Recognition Test</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
@@ -139,9 +139,9 @@
 
 <div class="scan-panel">
   <h2>Camera Input</h2>
-  <p><strong>v0.13.5 test:</strong> the standalone localizer now finds the three inventory rims first, then confirms the permanent plaque geometry with a clean deterministic mask. It remains isolated from the solver until localization is proven reliable.</p>
+  <p><strong>v0.13.6 test:</strong> camera capture now uses exactly the visible short viewfinder crop. The standalone scanner localizes X/Y/Z, then identifies the three emojis for review without writing to the solver.</p>
   <div class="scan-row">
-    <button id="inventoryLocalizerTestButton" class="scan-button" type="button" onclick="location.href='inventory-localizer.html?v=0135'">Inventory Geometry Test</button>
+    <button id="inventoryLocalizerTestButton" class="scan-button" type="button" onclick="location.href='inventory-localizer.html?v=0136'">Inventory Geometry Test</button>
     <button id="scanInventoryButton" class="scan-button secondary" type="button" onclick="if(window.ppaiOpenInventoryScanner){window.ppaiOpenInventoryScanner();}else{alert('Inventory scanner script did not load. Refresh the page and try again.');}">Legacy Inventory Scanner</button>
     <button id="scanPyramidButton" class="scan-button secondary" type="button">Pyramid Scanner (Experimental)</button>
   </div>
@@ -280,7 +280,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.13.5'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.13.6'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
@@ -452,10 +452,10 @@ document.querySelectorAll('.depth-btn').forEach(b=>b.addEventListener('click',()
 refreshHints();renderDemoLibrary();setFileStatus();document.getElementById('memoryUseMode').value=localStorage.getItem('ppaiMemoryUseMode')||'INDEPENDENT';document.getElementById('memoryUseMode').addEventListener('change',e=>localStorage.setItem('ppaiMemoryUseMode',e.target.value));updateStatus();
 </script>
 
-<script src="js/opencv.js?v=0135"></script>
-<script src="js/opencv-loader.js?v=0135"></script>
-<script src="js/pyramid-reference.js?v=0135"></script>
-<script src="js/ppai-scan.js?v=0135"></script>
-<script src="js/ppai-inventory-scan.js?v=0135"></script>
+<script src="js/opencv.js?v=0136"></script>
+<script src="js/opencv-loader.js?v=0136"></script>
+<script src="js/pyramid-reference.js?v=0136"></script>
+<script src="js/ppai-scan.js?v=0136"></script>
+<script src="js/ppai-inventory-scan.js?v=0136"></script>
 
 </body></html>
