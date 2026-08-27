@@ -1,0 +1,29 @@
+PPAI JS v0.13.7 — V0.13.5 LOCALIZATION + VIEWFINDER CAPTURE + READINGS
+
+Important:
+This build intentionally starts from v0.13.5.
+
+Localization behavior / thresholds from v0.13.5 are preserved.
+The v0.13.6 three-circle hard-gate changes are NOT carried forward.
+
+Only two functional additions are layered onto the v0.13.5 base:
+
+1. EXACT VIEWFINDER CAPTURE
+   Take Photo now reproduces the short viewfinder's CSS object-fit: cover crop.
+   Hidden pyramid content outside the visible viewfinder is no longer included.
+
+2. RECOGNITION RESULTS
+   After the unchanged v0.13.5 localizer produces normalized X/Y/Z crops,
+   each crop is compared against images/emoji1.png through emoji18.png.
+   The standalone page displays:
+   - E number
+   - color family
+   - confidence
+   - runner-up
+   - best-vs-second margin
+
+Recognition is review-only.
+Nothing is written into index.html tile data or the solver.
+
+Visible version:
+PPAI JS v0.13.7

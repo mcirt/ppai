@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PPAI Inventory Silhouette Localizer v0.13.6</title>
+<title>PPAI Inventory Silhouette Localizer v0.13.7</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
@@ -48,12 +48,12 @@ input[type=file]{position:absolute;left:-9999px}
 <body>
 <main>
   <h1>Inventory Silhouette Localizer</h1>
-  <div class="version">PPAI JS v0.13.6 — Inventory Silhouette Localization</div>
+  <div class="version">PPAI JS v0.13.7 — Inventory Silhouette Localization</div>
 
   <div class="card">
     <div class="note">
       <strong>Standalone test only.</strong> This does not change the solver or enter tiles.
-      Take one photo containing the three overlapping inventory plaques. <strong>Take Photo now captures exactly what is visible in the short viewfinder</strong>, then the detector localizes X/Y/Z and identifies each emoji.
+      Take one photo containing the three overlapping inventory plaques. This keeps the v0.13.5 localization logic, but <strong>Take Photo captures exactly what is visible in the short viewfinder</strong> and the normalized X/Y/Z crops are then identified.
     </div>
     <div class="actions camera-actions">
       <button id="startCameraButton" class="primary" type="button">Open Camera</button>
@@ -93,15 +93,17 @@ input[type=file]{position:absolute;left:-9999px}
     </div>
     <div id="recognitionSummary" class="recognition-summary">Recognition has not run yet.</div>
     <p class="small">
-      These are fixed canonical X/Y/Z crops after localization. v0.13.6 also compares each crop against the 18 original emoji PNGs. Recognition is for review only and does not write to the solver.
+      These are fixed canonical X/Y/Z crops after the detected inventory object has been
+      translated, scaled, and rotation-corrected. Emoji classification is intentionally
+      now connected for review in v0.13.7. Recognition results do not write to the solver.
     </p>
   </div>
 
   <div class="card">
-    <h2 style="margin:0 0 7px">Reference used by v0.13.6</h2>
+    <h2 style="margin:0 0 7px">Reference used by v0.13.7</h2>
     <div class="ref-preview">
-      <div><div class="small">Exact-pixel crop from original screenshot</div><img src="images/inventory_reference_v0136.png?v=0136"></div>
-      <div><div class="small">Clean geometry support mask — rims + permanent plaque edges only</div><img src="images/inventory_reference_mask_v0136.png?v=0136"></div>
+      <div><div class="small">Exact-pixel crop from original screenshot</div><img src="images/inventory_reference_v0137.png?v=0137"></div>
+      <div><div class="small">Clean geometry support mask — rims + permanent plaque edges only</div><img src="images/inventory_reference_mask_v0137.png?v=0137"></div>
     </div>
     <p class="small">
       This mask is drawn from measured geometry on the original screenshot. It is not threshold-generated. The changing emoji interiors and background are excluded.
@@ -109,9 +111,9 @@ input[type=file]{position:absolute;left:-9999px}
   </div>
 </main>
 
-<script src="js/opencv.js?v=0136"></script>
-<script src="js/opencv-loader.js?v=0136"></script>
-<script src="js/inventory-reference-v0136.js?v=0136"></script>
-<script src="js/ppai-inventory-localizer-v0136.js?v=0136"></script>
+<script src="js/opencv.js?v=0137"></script>
+<script src="js/opencv-loader.js?v=0137"></script>
+<script src="js/inventory-reference-v0137.js?v=0137"></script>
+<script src="js/ppai-inventory-localizer-v0137.js?v=0137"></script>
 </body>
 </html>
