@@ -1,7 +1,10 @@
 (function () {
   "use strict";
 
-  const SOURCE = "js/opencv.js?v=0133";
+  window.ppaiCvIsReady = !!window.ppaiCvIsReady;
+  window.ppaiCvReadyError = window.ppaiCvReadyError || null;
+
+  const SOURCE = "js/opencv.js?v=0135";
   const TIMEOUT_MS = 120000;
   let settled = false;
   let timeoutId = 0;
@@ -29,6 +32,8 @@
     settled = true;
     window.clearTimeout(timeoutId);
     window.cv = readyCv;
+    window.ppaiCvIsReady = true;
+    window.ppaiCvReadyError = null;
     dispatch("ppai-opencv-ready", { source: SOURCE });
 
     // IMPORTANT: this OpenCV build is thenable but not a normal Promise.
@@ -43,6 +48,8 @@
     const error = errorLike instanceof Error
       ? errorLike
       : new Error(String(errorLike || "OpenCV failed to initialize."));
+    window.ppaiCvIsReady = false;
+    window.ppaiCvReadyError = error;
     dispatch("ppai-opencv-error", {
       message: error.message,
       source: SOURCE
@@ -88,6 +95,8 @@
 
   function createReadyPromise() {
     settled = false;
+    window.ppaiCvIsReady = false;
+    window.ppaiCvReadyError = null;
     window.ppaiCvReady = new Promise(function (resolve, reject) {
       resolveReady = resolve;
       rejectReady = reject;
