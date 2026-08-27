@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const SOURCE = "js/opencv.js?v=1";
+  const SOURCE = "js/opencv.js?v=0133";
   const TIMEOUT_MS = 120000;
   let settled = false;
   let timeoutId = 0;
