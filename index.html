@@ -96,31 +96,32 @@
 .inventory-result .runner{font-size:10px;color:#666;margin-top:2px}
 
 
-/* v0.13.1 compact inventory camera */
+/* v0.13.4 legacy-height inventory camera: deliberately short and wide */
 .inventory-camera-wrap{
-  max-height:23vh !important;
-  min-height:180px;
+  height:240px !important;
+  min-height:0 !important;
+  max-height:240px !important;
   overflow:hidden;
 }
 #ppaiInventoryVideo,
 #ppaiInventoryPhotoCanvas,
 #ppaiInventoryOverlayCanvas{
   width:100%;
-  height:23vh !important;
-  max-height:23vh !important;
+  height:240px !important;
+  max-height:240px !important;
   object-fit:cover !important;
   object-position:center 46% !important;
 }
 @media(max-width:520px){
   .inventory-camera-wrap{
-    max-height:21vh !important;
-    min-height:160px;
+    height:190px !important;
+    max-height:190px !important;
   }
   #ppaiInventoryVideo,
   #ppaiInventoryPhotoCanvas,
   #ppaiInventoryOverlayCanvas{
-    height:21vh !important;
-    max-height:21vh !important;
+    height:190px !important;
+    max-height:190px !important;
   }
 }
 
@@ -128,7 +129,7 @@
 </head>
 <body>
 <h1>Puzzle Pyramid AI</h1>
-<div class="version">PPAI JS v0.13.3 — Inventory Silhouette Localization Test</div>
+<div class="version">PPAI JS v0.13.4 — Geometry-First Inventory Localization Test</div>
 <div id="fileStatus" class="file-status">No file loaded</div>
 <div id="pyramid"></div>
 <div class="inventory-wrap"><div class="inventory" id="inventory"></div></div>
@@ -138,9 +139,9 @@
 
 <div class="scan-panel">
   <h2>Camera Input</h2>
-  <p><strong>v0.13.3 test:</strong> the new inventory localizer searches for the permanent three-plaque silhouette first, then derives fixed X/Y/Z crop locations. It is isolated from the solver until localization is proven reliable.</p>
+  <p><strong>v0.13.4 test:</strong> the standalone localizer now finds the three inventory rims first, then confirms the permanent plaque geometry with a clean deterministic mask. It remains isolated from the solver until localization is proven reliable.</p>
   <div class="scan-row">
-    <button id="inventoryLocalizerTestButton" class="scan-button" type="button" onclick="location.href='inventory-localizer.html?v=0133'">Inventory Silhouette Test</button>
+    <button id="inventoryLocalizerTestButton" class="scan-button" type="button" onclick="location.href='inventory-localizer.html?v=0134'">Inventory Geometry Test</button>
     <button id="scanInventoryButton" class="scan-button secondary" type="button" onclick="if(window.ppaiOpenInventoryScanner){window.ppaiOpenInventoryScanner();}else{alert('Inventory scanner script did not load. Refresh the page and try again.');}">Legacy Inventory Scanner</button>
     <button id="scanPyramidButton" class="scan-button secondary" type="button">Pyramid Scanner (Experimental)</button>
   </div>
@@ -279,7 +280,7 @@
 <input type="file" id="demoLibraryInput" hidden accept=".json,application/json">
 <script>
 'use strict';
-const VERSION='Puzzle Pyramid AI JS v0.13.3'; const TOTAL_TILES=52;
+const VERSION='Puzzle Pyramid AI JS v0.13.4'; const TOTAL_TILES=52;
 const DEMO_LIBRARY_KEY='ppaiDemoLibraryV1';
 const VALID_EMOJIS=new Set(Array.from({length:18},(_,i)=>`emoji${i+1}`));
 let currentTile=1, selectedTileId=null, tileData={}, currentFilename='';
@@ -298,7 +299,34 @@ function makeBoard(){let id=1;const root=document.getElementById('pyramid');for(
 function handleBoardTileClick(id){if(activeHintKey){setHint(activeHintKey,id);armHint(null);return}selectTile(id)}
 function makeKeyboard(){const k=document.getElementById('emojiKeyboard');for(let i=1;i<=18;i++){const key=`emoji${i}`;const b=document.createElement('button');b.className='emoji-key';b.dataset.emoji=key;b.title=key;b.style.backgroundImage=`url('${emojiPath(key)}')`;b.addEventListener('click',()=>enterEmoji(key,b));k.appendChild(b)}}
 function recalc(){currentTile=1;while(currentTile<=52&&normalizeEmoji(tileData[currentTile]))currentTile++;updateStatus()}
-function enterEmoji(key,button){if(selectedTileId!==null){const id=selectedTileId;tileData[id]=key;setTileValue(id,key);clearTileSelection();recalc();updateStatus(`Tile ${id} updated to ${key}.`)}else{if(currentTile>52){updateStatus('All 52 tiles are filled. Tap a tile to edit it.');return}tileData[currentTile]=key;setTileValue(currentTile,key);currentTile++;updateStatus()}document.querySelectorAll('.emoji-key.active').forEach(x=>x.classList.remove('active'));button.classList.add('active');setTimeout(()=>button.classList.remove('active'),140)}
+function isPhoneInventoryView(){return window.matchMedia("(max-width:600px)").matches}
+function followInventoryTile(tileId,behavior="smooth"){
+  if(!isPhoneInventoryView())return;
+  const wrap=document.querySelector(".inventory-wrap"), tile=document.getElementById(`tile${tileId}`);
+  if(!wrap||!tile)return;
+  const next=Math.min(52,Math.max(29,tileId));
+  const target=document.getElementById(`tile${next}`)||tile;
+  const desired=target.offsetLeft-wrap.clientWidth*0.58;
+  const max=Math.max(0,wrap.scrollWidth-wrap.clientWidth);
+  wrap.scrollTo({left:Math.max(0,Math.min(max,desired)),behavior});
+}
+function followInventoryProgress(lastTouched=null){
+  if(!isPhoneInventoryView())return;
+  let target=lastTouched;
+  if(!(target>=29&&target<=52))target=currentTile>52?52:Math.max(29,currentTile);
+  requestAnimationFrame(()=>followInventoryTile(target));
+}
+function enterEmoji(key,button){
+  let touched=null;
+  if(selectedTileId!==null){
+    const id=selectedTileId;touched=id;tileData[id]=key;setTileValue(id,key);clearTileSelection();recalc();updateStatus(`Tile ${id} updated to ${key}.`);
+  }else{
+    if(currentTile>52){updateStatus('All 52 tiles are filled. Tap a tile to edit it.');return}
+    touched=currentTile;tileData[currentTile]=key;setTileValue(currentTile,key);currentTile++;updateStatus();
+  }
+  document.querySelectorAll('.emoji-key.active').forEach(x=>x.classList.remove('active'));button.classList.add('active');setTimeout(()=>button.classList.remove('active'),140);
+  if(touched>=29)followInventoryProgress(touched);
+}
 
 window.ppaiApplyRecognizedPyramid=function(results){
   if(!Array.isArray(results)||results.length!==28){
@@ -377,7 +405,7 @@ window.ppaiApplyInventoryTriplet=function(values){
   }else{
     updateStatus(`Inventory scan applied: Tiles ${start}–${end}. Next input: Tile ${currentTile} of 52.`);
   }
-  return {ok:true,start,end,nextTile:currentTile,complete:currentTile>52};
+  followInventoryProgress(end);return {ok:true,start,end,nextTile:currentTile,complete:currentTile>52};
 };
 
 function boardHasData(){return Object.values(tileData).some(normalizeEmoji)}
@@ -411,8 +439,8 @@ document.getElementById('exportDemoButton').onclick=()=>{const payload={schemaVe
 document.getElementById('importDemoButton').onclick=()=>document.getElementById('demoLibraryInput').click();
 document.getElementById('demoLibraryInput').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result);const incoming=Array.isArray(p)?p:p.demos;if(!Array.isArray(incoming))throw new Error('No demos array');const map=new Map(getDemoLibrary().map(d=>[d.id,d]));incoming.forEach(d=>map.set(d.id||`${d.signature}-${Math.random()}`,d));saveDemoLibrary([...map.values()]);updateStatus(`Imported ${incoming.length} demo records.`)}catch(err){console.error(err);updateStatus('Could not import that demo library.')}finally{e.target.value=''}};r.readAsText(f)});
 
-document.getElementById('deleteButton').addEventListener('click',()=>{if(selectedTileId!==null){const id=selectedTileId;delete tileData[id];setTileValue(id,null);clearTileSelection();recalc();updateStatus(`Tile ${id} cleared.`);return}if(currentTile===1){updateStatus('Nothing to delete.');return}if(currentTile>52)currentTile=53;currentTile--;delete tileData[currentTile];setTileValue(currentTile,null);updateStatus()});
-document.getElementById('clearButton').addEventListener('click',()=>{tileData={};currentTile=1;currentFilename='';for(let i=1;i<=52;i++)setTileValue(i,null);clearTileSelection();setFileStatus();updateStatus('Board cleared. Next input: Tile 1 of 52')});
+document.getElementById('deleteButton').addEventListener('click',()=>{if(selectedTileId!==null){const id=selectedTileId;delete tileData[id];setTileValue(id,null);clearTileSelection();recalc();updateStatus(`Tile ${id} cleared.`);if(id>=29)followInventoryProgress(id);return}if(currentTile===1){updateStatus('Nothing to delete.');return}if(currentTile>52)currentTile=53;currentTile--;delete tileData[currentTile];setTileValue(currentTile,null);updateStatus();if(currentTile>=29)followInventoryProgress(currentTile)});
+document.getElementById('clearButton').addEventListener('click',()=>{tileData={};currentTile=1;currentFilename='';for(let i=1;i<=52;i++)setTileValue(i,null);clearTileSelection();setFileStatus();updateStatus('Board cleared. Next input: Tile 1 of 52');const w=document.querySelector('.inventory-wrap');if(w)w.scrollTo({left:0,behavior:'smooth'})});
 document.getElementById('playButton').addEventListener('click',()=>openDestination('game.html','Puzzle Pyramid Game'));
 document.getElementById('solveButton').addEventListener('click',()=>openDestination('solver.html','Puzzle Pyramid Solver'));
 function ts(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`}
@@ -424,10 +452,10 @@ document.querySelectorAll('.depth-btn').forEach(b=>b.addEventListener('click',()
 refreshHints();renderDemoLibrary();setFileStatus();document.getElementById('memoryUseMode').value=localStorage.getItem('ppaiMemoryUseMode')||'INDEPENDENT';document.getElementById('memoryUseMode').addEventListener('change',e=>localStorage.setItem('ppaiMemoryUseMode',e.target.value));updateStatus();
 </script>
 
-<script src="js/opencv.js?v=0133"></script>
-<script src="js/opencv-loader.js?v=0133"></script>
-<script src="js/pyramid-reference.js?v=0133"></script>
-<script src="js/ppai-scan.js?v=0133"></script>
-<script src="js/ppai-inventory-scan.js?v=0133"></script>
+<script src="js/opencv.js?v=0134"></script>
+<script src="js/opencv-loader.js?v=0134"></script>
+<script src="js/pyramid-reference.js?v=0134"></script>
+<script src="js/ppai-scan.js?v=0134"></script>
+<script src="js/ppai-inventory-scan.js?v=0134"></script>
 
 </body></html>
