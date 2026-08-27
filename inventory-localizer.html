@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PPAI Inventory Silhouette Localizer v0.13.3</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
+main{max-width:820px;margin:0 auto;padding:14px}
+h1{margin:0 0 4px;font-size:clamp(26px,7vw,40px)}
+.version{font-weight:800;color:#1769aa;margin-bottom:10px}
+.card{background:#fff;border:1px solid #cbd3db;border-radius:12px;padding:12px;margin:10px 0}
+.note{font-size:14px;line-height:1.4;color:#444}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+button,.file-label{border:0;border-radius:9px;padding:13px 12px;font-size:16px;font-weight:800;text-align:center;cursor:pointer}
+.primary,.file-label{background:#1769aa;color:#fff}.secondary{background:#666;color:#fff}
+input[type=file]{position:absolute;left:-9999px}
+#status{font-weight:800;line-height:1.35;padding:10px;border-radius:8px;background:#eef2f5;margin-top:10px}
+#status.good{background:#edf9f0;border:1px solid #68b77b;color:#155d27}
+#status.bad{background:#fff0f0;border:1px solid #d68b8b;color:#8d2020}
+#status.working{background:#eef6ff;border:1px solid #7eafd7;color:#14547f}
+.stage{position:relative;background:#000;border-radius:10px;overflow:hidden;max-height:46vh;margin-top:10px}
+.stage canvas{display:block;width:100%;height:auto;max-height:46vh;object-fit:contain}
+#overlayCanvas{position:absolute;inset:0}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:10px}
+.metric{background:#f6f8fa;border:1px solid #d9dfe5;border-radius:8px;padding:8px;text-align:center}
+.metric b{display:block;font-size:18px}
+.crop-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:9px}
+.crop{border:1px solid #ccd4dc;border-radius:8px;padding:6px;text-align:center;background:#fafafa}
+.crop canvas{width:100%;height:auto;background:#111;border-radius:6px}
+.crop b{display:block;margin-bottom:4px}
+#normalizedCanvas{width:100%;height:auto;background:#111;border-radius:8px}
+.small{font-size:12px;color:#666;line-height:1.35}
+.ref-preview{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ref-preview img{width:100%;height:auto;border-radius:7px;background:#111}
+@media(max-width:520px){main{padding:9px}.actions{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.card{padding:9px}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Inventory Silhouette Localizer</h1>
+  <div class="version">PPAI JS v0.13.3 — Inventory Silhouette Localization</div>
+
+  <div class="card">
+    <div class="note">
+      <strong>Standalone test only.</strong> This does not change the solver or enter tiles.
+      Take one photo containing the three overlapping inventory plaques. The detector searches
+      for the permanent three-plaque object, not for three independent emojis.
+    </div>
+    <div class="actions">
+      <label class="file-label" for="photoInput">Take / Choose Inventory Photo</label>
+      <button id="reanalyzeButton" class="secondary" type="button" disabled>Analyze Again</button>
+    </div>
+    <input id="photoInput" type="file" accept="image/*" capture="environment">
+    <div id="opencvStatus" class="small" style="margin-top:8px">Loading OpenCV…</div>
+    <div id="status">Waiting for a photo.</div>
+
+    <div class="stage" id="stage" hidden>
+      <canvas id="sourceCanvas"></canvas>
+      <canvas id="overlayCanvas"></canvas>
+    </div>
+
+    <div class="metrics" id="metrics" hidden>
+      <div class="metric">Template fit<b id="fitScore">—</b></div>
+      <div class="metric">Overall confidence<b id="overallScore">—</b></div>
+      <div class="metric">Scale<b id="scaleScore">—</b></div>
+      <div class="metric">Rotation<b id="rotationScore">—</b></div>
+    </div>
+  </div>
+
+  <div class="card" id="normalizedCard" hidden>
+    <h2 style="margin:0 0 7px">Normalized Inventory Region</h2>
+    <canvas id="normalizedCanvas" width="890" height="610"></canvas>
+    <div class="crop-grid">
+      <div class="crop"><b>X crop</b><canvas id="cropX" width="190" height="190"></canvas><span id="rimX" class="small"></span></div>
+      <div class="crop"><b>Y crop</b><canvas id="cropY" width="190" height="190"></canvas><span id="rimY" class="small"></span></div>
+      <div class="crop"><b>Z crop</b><canvas id="cropZ" width="190" height="190"></canvas><span id="rimZ" class="small"></span></div>
+    </div>
+    <p class="small">
+      These are fixed canonical X/Y/Z crops after the detected inventory object has been
+      translated, scaled, and rotation-corrected. Emoji classification is intentionally
+      not connected yet; v0.13.3 is only testing localization and fixed cropping.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin:0 0 7px">Reference used by v0.13.3</h2>
+    <div class="ref-preview">
+      <div><div class="small">Exact-pixel crop from original screenshot</div><img src="images/inventory_reference_v0133.png?v=0133"></div>
+      <div><div class="small">Deterministic localization mask</div><img src="images/inventory_reference_mask_v0133.png?v=0133"></div>
+    </div>
+    <p class="small">
+      The changing emoji interiors are removed from the localization mask. The clean AI-edited
+      illustration is not used as a matching template.
+    </p>
+  </div>
+</main>
+
+<script src="js/opencv.js?v=0133"></script>
+<script src="js/opencv-loader.js?v=0133"></script>
+<script src="js/inventory-reference-v0133.js?v=0133"></script>
+<script src="js/ppai-inventory-localizer-v0133.js?v=0133"></script>
+</body>
+</html>
