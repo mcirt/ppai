@@ -4,7 +4,7 @@
   window.ppaiCvIsReady = !!window.ppaiCvIsReady;
   window.ppaiCvReadyError = window.ppaiCvReadyError || null;
 
-  const SOURCE = "js/opencv.js?v=0136";
+  const SOURCE = "js/opencv.js?v=0137";
   const TIMEOUT_MS = 120000;
   let settled = false;
   let timeoutId = 0;
