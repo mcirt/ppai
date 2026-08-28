@@ -1,0 +1,14 @@
+PPAI JS v0.13.8
+
+Frozen from v0.13.7:
+- short camera viewfinder
+- exact visible-viewfinder capture
+- localization math / normalized X-Y-Z crops
+- game / solver logic
+
+Changed:
+1. Strong plaque geometry (>=80%) may lock with looser rim geometry.
+2. Classifier now masks bronze rim/card body and compares inner symbol shape within the selected 3-emoji color family.
+3. Each slot shows all 3 same-family candidate scores for debugging.
+
+Visible version: PPAI JS v0.13.8

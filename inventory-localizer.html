@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PPAI Inventory Silhouette Localizer v0.13.7</title>
+<title>PPAI Inventory Silhouette Localizer v0.13.8</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
@@ -48,12 +48,12 @@ input[type=file]{position:absolute;left:-9999px}
 <body>
 <main>
   <h1>Inventory Silhouette Localizer</h1>
-  <div class="version">PPAI JS v0.13.7 — Inventory Silhouette Localization</div>
+  <div class="version">PPAI JS v0.13.8 — Inventory Silhouette Localization</div>
 
   <div class="card">
     <div class="note">
       <strong>Standalone test only.</strong> This does not change the solver or enter tiles.
-      Take one photo containing the three overlapping inventory plaques. This keeps the v0.13.5 localization logic, but <strong>Take Photo captures exactly what is visible in the short viewfinder</strong> and the normalized X/Y/Z crops are then identified.
+      Take one photo containing the three overlapping inventory plaques. Camera capture and localization are unchanged from v0.13.7. v0.13.8 improves only lock acceptance and inner-symbol emoji classification.
     </div>
     <div class="actions camera-actions">
       <button id="startCameraButton" class="primary" type="button">Open Camera</button>
@@ -95,15 +95,15 @@ input[type=file]{position:absolute;left:-9999px}
     <p class="small">
       These are fixed canonical X/Y/Z crops after the detected inventory object has been
       translated, scaled, and rotation-corrected. Emoji classification is intentionally
-      now connected for review in v0.13.7. Recognition results do not write to the solver.
+      now connected for review in v0.13.8. Recognition results do not write to the solver.
     </p>
   </div>
 
   <div class="card">
-    <h2 style="margin:0 0 7px">Reference used by v0.13.7</h2>
+    <h2 style="margin:0 0 7px">Reference used by v0.13.8</h2>
     <div class="ref-preview">
-      <div><div class="small">Exact-pixel crop from original screenshot</div><img src="images/inventory_reference_v0137.png?v=0137"></div>
-      <div><div class="small">Clean geometry support mask — rims + permanent plaque edges only</div><img src="images/inventory_reference_mask_v0137.png?v=0137"></div>
+      <div><div class="small">Exact-pixel crop from original screenshot</div><img src="images/inventory_reference_v0138.png?v=0138"></div>
+      <div><div class="small">Clean geometry support mask — rims + permanent plaque edges only</div><img src="images/inventory_reference_mask_v0138.png?v=0138"></div>
     </div>
     <p class="small">
       This mask is drawn from measured geometry on the original screenshot. It is not threshold-generated. The changing emoji interiors and background are excluded.
@@ -111,9 +111,9 @@ input[type=file]{position:absolute;left:-9999px}
   </div>
 </main>
 
-<script src="js/opencv.js?v=0137"></script>
-<script src="js/opencv-loader.js?v=0137"></script>
-<script src="js/inventory-reference-v0137.js?v=0137"></script>
-<script src="js/ppai-inventory-localizer-v0137.js?v=0137"></script>
+<script src="js/opencv.js?v=0138"></script>
+<script src="js/opencv-loader.js?v=0138"></script>
+<script src="js/inventory-reference-v0138.js?v=0138"></script>
+<script src="js/ppai-inventory-localizer-v0138.js?v=0138"></script>
 </body>
 </html>
