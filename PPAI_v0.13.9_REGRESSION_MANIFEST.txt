@@ -1,0 +1,27 @@
+PPAI JS v0.13.9 — OPEN-CV STARTUP REGRESSION FIX
+
+KNOWN-GOOD / FROZEN FROM v0.13.7
+- OpenCV loader implementation
+- OpenCV readiness initialization flow
+- Open Camera behavior
+- Camera permissions flow
+- Short viewfinder sizing
+- Exact visible-viewfinder capture
+- Inventory localization geometry
+- Normalized X/Y/Z crop pipeline
+- Solver/game logic
+
+PRESERVED FROM v0.13.8
+- Strong-plaque lock override
+- Inner-symbol classifier
+- Same-family top-3 candidate debug scores
+
+ONLY INTENDED CHANGE IN v0.13.9
+Restore the exact known-good OpenCV startup/initialization plumbing from v0.13.7
+while preserving the v0.13.8 classifier and lock improvements.
+
+REGRESSION RULE
+Frozen components must be copied from the previous known-good implementation,
+not recreated, refactored, modernized, or rewritten.
+
+Visible version: PPAI JS v0.13.9
