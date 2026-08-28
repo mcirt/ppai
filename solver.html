@@ -53,6 +53,7 @@ h1 { text-align:center; margin:0 0 4px; }
 .solver-controls .transport-button:disabled{opacity:.38;cursor:default;transform:none}
 .solver-controls #play-pause-button{background:#1769aa;color:#fff;border-color:#1769aa;font-size:31px}
 .solver-controls #play-pause-button.playing{background:#b42318;border-color:#b42318}
+.stop-search-row{display:flex;justify-content:center;margin:10px auto 0}.stop-search-button{padding:10px 18px;border:0;border-radius:8px;background:#b42318;color:#fff;font-weight:800;cursor:pointer;box-shadow:0 2px 5px rgba(0,0,0,.16);touch-action:manipulation}.stop-search-button:disabled{opacity:.38;cursor:default}
 .transport-wrap{display:flex;flex-direction:column;align-items:center;gap:3px}
 .transport-label{font-size:10px;font-weight:800;color:#666;letter-spacing:.3px}
 .solver-note{text-align:center;color:#666;font-size:13px;margin-top:8px}
@@ -127,10 +128,13 @@ h1 { text-align:center; margin:0 0 4px; }
     </select>
   </label>
 </div>
+<div class="stop-search-row">
+  <button id="stop-search-button" class="stop-search-button" disabled>STOP SEARCH — KEEP BEST FOUND</button>
+</div>
 <div class="download-row">
   <button id="download-button">Download Solver Log</button>
 </div>
-<div class="solver-note">v0.9.8 keeps the STANDARD fast path and Known Demo restart fix, and makes playback counters persistent: Draw, RESET, and Match/Clear/Hold/Match-Hold counters remain visible until the next action changes them; Pause no longer clears them; Back and Restart restore the correct counter state for that playback snapshot. STANDARD it skips backward Endgame-First generation, Reachability, LITP, and lane validation, then goes directly to the 8260 Perfect Score Probe and forward full-plan search. DEEP keeps the complete backward endgame/reachability/LITP pipeline and uses its result as forward-search guidance. Both modes retain inventory-wave reasoning, post-reset projection, Hold Corridor skills, playback snapshots, and the four transport controls. Playback Speed includes Ultra 0.30 sec. Final scoring now awards 50 points for every tile still remaining when Tile 1 is cleared, including one tile in Hold if occupied. v0.10.1 matches the real-game sliding inventory window: with 3 or more surviving in-play inventory tiles, the three highest survivors fill X/Y/Z; with 2 survivors they occupy X/Y; with 1 survivor it occupies X. The rightmost occupied visible slot is playable. With Hold empty, dragging a playable tile onto a complementary blocked tile is accepted only when holding the source would immediately expose that target; internally it remains canonical HOLD + MATCH_HOLD.</div>
+<div class="solver-note"><strong>PPAI v0.13.10:</strong> manual STOP SEARCH safely ends calculation at cooperative checkpoints and keeps the best plan found so far. v0.9.8 keeps the STANDARD fast path and Known Demo restart fix, and makes playback counters persistent: Draw, RESET, and Match/Clear/Hold/Match-Hold counters remain visible until the next action changes them; Pause no longer clears them; Back and Restart restore the correct counter state for that playback snapshot. STANDARD it skips backward Endgame-First generation, Reachability, LITP, and lane validation, then goes directly to the 8260 Perfect Score Probe and forward full-plan search. DEEP keeps the complete backward endgame/reachability/LITP pipeline and uses its result as forward-search guidance. Both modes retain inventory-wave reasoning, post-reset projection, Hold Corridor skills, playback snapshots, and the four transport controls. Playback Speed includes Ultra 0.30 sec. Final scoring now awards 50 points for every tile still remaining when Tile 1 is cleared, including one tile in Hold if occupied. v0.10.1 matches the real-game sliding inventory window: with 3 or more surviving in-play inventory tiles, the three highest survivors fill X/Y/Z; with 2 survivors they occupy X/Y; with 1 survivor it occupies X. The rightmost occupied visible slot is playable. With Hold empty, dragging a playable tile onto a complementary blocked tile is accepted only when holding the source would immediately expose that target; internally it remains canonical HOLD + MATCH_HOLD.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
@@ -635,6 +639,9 @@ const FULL_SEARCH_WALL_BUDGET_MS=SOLVER_DEPTH_MODE==='DEEP'?70000:7000;
 let solverDeadline=0;
 let solverPhaseDeadline=0;
 let solverTimedOut=false;
+let solverSearching=false;
+let solverSearchStopRequested=false;
+let solverManuallyStopped=false;
 let solverPhaseStats={
   endgame:{elapsedMs:0,truncated:false,candidatesValidated:0},
   reachability:{elapsedMs:0,truncated:false,states:0},
@@ -673,6 +680,7 @@ function solverTimeRemaining(){return Math.max(0,solverDeadline-performance.now(
 function setSolverPhaseBudget(ms){solverPhaseDeadline=Math.min(solverDeadline||Infinity,performance.now()+ms)}
 function clearSolverPhaseBudget(){solverPhaseDeadline=0}
 function solverTimeExpired(){
+  if(solverSearchStopRequested) return true;
   const now=performance.now();
   if(solverDeadline&&now>=solverDeadline){solverTimedOut=true;return true}
   if(solverPhaseDeadline&&now>=solverPhaseDeadline)return true;
@@ -2710,7 +2718,8 @@ async function searchBestPlan(perfectProbe=null,config={}){
     if(result.bestCompletedScore===PERFECT_SCORE) break;
   }
 
-  if(solverTimeExpired()) result.stopReason=`${phaseName} stopped at its time budget; best result retained.`;
+  if(solverSearchStopRequested) result.stopReason=`${phaseName} manually stopped — best result found so far retained.`;
+  else if(solverTimeExpired()) result.stopReason=`${phaseName} stopped at its time budget; best result retained.`;
   else if(result.limitReached) result.stopReason=`${phaseName} stopped at ${stateLimit.toLocaleString()} states; best result retained.`;
   else if(!frontier.length) result.stopReason=`${phaseName} frontier exhausted within beam ${beamWidth.toLocaleString()}; optimality not proven.`;
   else if(result.bestCompletedScore===PERFECT_SCORE) result.stopReason=`${phaseName} found PERFECT 8260.`;
@@ -2755,6 +2764,7 @@ async function runProgressiveDeepSearch(perfectProbe){
   solverDeepStats.teacherProfile=deepTeacherProfile?JSON.parse(JSON.stringify(deepTeacherProfile)):null;
 
   for(let i=0;i<passes.length;i++){
+    if(solverSearchStopRequested) break;
     if(solverDeadline && performance.now()>=solverDeadline) break;
     const p=passes[i];
     const passStart=performance.now();
@@ -3024,6 +3034,11 @@ async function solverLoop(){
   updatePlaybackTransport();
 }
 async function prepareSolverPlan(){
+  solverSearchStopRequested=false;
+  solverManuallyStopped=false;
+  solverSearching=true;
+  const stopButton=document.getElementById('stop-search-button');
+  if(stopButton){stopButton.disabled=false;stopButton.textContent='STOP SEARCH — KEEP BEST FOUND';}
   const startButton=document.getElementById('play-pause-button');
   const forwardButton=document.getElementById('forward-step-button');
   const calc=document.getElementById('calculated-score-value');
@@ -3062,6 +3077,8 @@ async function prepareSolverPlan(){
       startButton.disabled=false;
       forwardButton.disabled=false;
       updatePlaybackTransport();
+      solverSearching=false;
+      if(stopButton) stopButton.disabled=true;
       setStatus(`Known human demo ready: ${known.finalScore??'?'} points. Press Play or Forward to replay it.`);
       return;
     }
@@ -3111,7 +3128,10 @@ async function prepareSolverPlan(){
   }else{
     const fullSearchStarted=performance.now();
     let found;
-    if(SOLVER_DEPTH_MODE==='DEEP'){
+    if(solverSearchStopRequested){
+      found=null;
+      document.getElementById('planProgress').textContent='Search manually stopped before full-plan search began.';
+    }else if(SOLVER_DEPTH_MODE==='DEEP'){
       setStatus(`${perfect.probe.stopReason} Starting Standard baseline, then progressive Deep search…`);
       calc.textContent='STANDARD BASELINE';
       await solverYield('STANDARD BASELINE');
@@ -3154,12 +3174,14 @@ async function prepareSolverPlan(){
     solverPhaseStats.perfectProbe.truncated,
     solverPhaseStats.fullSearch.truncated
   ].filter(Boolean).length;
+  solverSearching=false;
+  if(stopButton){stopButton.disabled=true;stopButton.textContent='STOP SEARCH — KEEP BEST FOUND';}
   const complete=!!solverPlanResult?.usedCompleteSolution;
   const score=complete?solverPlanResult.bestCompletedScore:null;
   calc.textContent=score!=null?`FOUND ${score.toLocaleString()}`:(solverPlan.length?'BEST PARTIAL':'NO SOLUTION');
   startButton.disabled=!solverPlan.length; forwardButton.disabled=!solverPlan.length;
   updatePlaybackTransport();
-  if(!solverPlan.length){ setStatus('No playable plan found.'); return; }
+  if(!solverPlan.length){ setStatus(solverManuallyStopped?'Search stopped before a playable plan was available.':'No playable plan found.'); return; }
   if(complete){
     if(SOLVER_DEPTH_MODE==='DEEP' && solverPlanResult?.deepMode){
       const base=solverPlanResult.standardBaselineScore;
@@ -3175,6 +3197,17 @@ async function prepareSolverPlan(){
     document.getElementById('planProgress').textContent=`Best partial plan — ${solverPlan.length} planned moves.`;
   }
 }
+function stopSolverSearch(){
+  if(!solverSearching) return;
+  solverSearchStopRequested=true;
+  solverManuallyStopped=true;
+  const btn=document.getElementById('stop-search-button');
+  if(btn){btn.disabled=true;btn.textContent='STOPPING… KEEPING BEST';}
+  setStatus('Stopping calculation at the next safe checkpoint. Best solution found so far will be kept.');
+  const progress=document.getElementById('planProgress');
+  if(progress) progress.textContent='Manual stop requested — finishing the current safe checkpoint…';
+}
+
 async function startSolver(){
   if(solverRunning||state.gameOver||!solverPlan.length||solverPlanIndex>=solverPlan.length) return;
   solverRunning=true;
@@ -3192,6 +3225,9 @@ setTimeout(()=>{
   prepareSolverPlan().catch(err=>{
     console.error('PPAI solver preparation failed:',err);
     solverRunning=false;
+    solverSearching=false;
+    const stopButton=document.getElementById('stop-search-button');
+    if(stopButton){stopButton.disabled=true;stopButton.textContent='STOP SEARCH — KEEP BEST FOUND';}
     const calc=document.getElementById('calculated-score-value');
     if(calc) calc.textContent='ERROR';
     const progress=document.getElementById('planProgress');
@@ -3204,6 +3240,7 @@ setTimeout(()=>{
 document.getElementById('draw-button').addEventListener('click',async()=>{ if(state.stockQueue.length){ await previewDraw({position:1,total:1}); draw(); } else { await previewReset(); resetStock(); } });
 document.getElementById('undo-button').addEventListener('click',undo);
 document.getElementById('download-button').addEventListener('click',downloadLog);
+document.getElementById('stop-search-button').addEventListener('click',stopSolverSearch);
 document.getElementById('play-pause-button').addEventListener('click',()=>{
   if(solverRunning) pauseSolver(); else startSolver();
 });

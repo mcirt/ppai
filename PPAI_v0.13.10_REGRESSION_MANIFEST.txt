@@ -1,0 +1,39 @@
+PPAI JS v0.13.10 — KNOWN-GOOD SCANNER + SOLVER STOP SEARCH
+
+SCANNER REGRESSION BASELINE
+The inventory scanner/localizer implementation is restored from and frozen to
+the known-good v0.13.7 build that successfully:
+- started OpenCV
+- opened the camera
+- captured the visible short viewfinder
+- located the inventory triplet
+- placed X/Y/Z geometry
+- normalized the inventory region
+- produced X/Y/Z recognition crops/readings
+
+The following files are BYTE-FOR-BYTE unchanged from v0.13.7:
+- js/opencv-loader.js
+- js/ppai-inventory-localizer-v0137.js
+- js/inventory-reference-v0137.js
+- images/inventory_reference_v0137.png
+- images/inventory_reference_mask_v0137.png
+
+Only the visible HTML version label is bumped to v0.13.10.
+
+SOLVER CHANGE
+solver.html receives a STOP SEARCH — KEEP BEST FOUND button modeled on the PSAI
+implementation supplied by the user.
+
+Behavior:
+- button enabled only while calculation is running
+- manual stop is checked by the same cooperative checkpoints already used for
+  PPAI time budgets, including ENDGAME, REACHABILITY, perfect probe, and full search
+- a completed/best partial plan already found is retained
+- DEEP does not start another pass after Stop is requested
+- if stopped before any playable plan exists, the solver says so
+- playback itself is not affected
+
+No other solver strategy/heuristic changes were made.
+
+VISIBLE VERSION
+PPAI JS v0.13.10
