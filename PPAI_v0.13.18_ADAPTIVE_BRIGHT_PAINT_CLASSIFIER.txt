@@ -1,0 +1,52 @@
+PPAI JS v0.13.18 — ADAPTIVE BRIGHT-PAINT SIBLING CLASSIFIER
+
+FROZEN
+------
+- v0.13.16 B&W plaque mask
+- v0.13.16 three dark-window X/Y/Z geometry
+- OpenCV startup/build
+- camera launch
+- short exact-viewfinder capture
+- game logic
+- solver Stop Search
+- solver default playback: Ultra 0.30 sec
+
+WHY THIS BUILD
+--------------
+v0.13.17 correctly identified color families and improved X/Y, but Z could still
+be misread as a full sibling (for example orange E6) because the dark complementary
+half retained an orange/brown hue and was counted as colored fill.
+
+WHAT CHANGED
+------------
+After family detection, the classifier now builds an ADAPTIVE BINARY BRIGHT-PAINT MASK.
+
+For each crop:
+1) collect pixels that plausibly belong to the detected hue family
+2) estimate that crop's brightness distribution
+3) derive an adaptive brightness threshold
+4) count only bright family-colored pixels as "paint"
+5) exclude dark same-hue pixels such as brown-orange or navy-blue
+6) compare the live binary paint mask against the three same-family reference masks
+
+Sibling comparison uses:
+- weighted IoU
+- weighted Dice overlap
+- bright-paint coverage
+- colored centroid
+- angular-sector occupancy
+- quadrant occupancy
+
+ANTI-FULL GATE
+--------------
+The "full" sibling is penalized if live bright-paint coverage is substantially
+below the full reference's coverage. This directly attacks the repeated E6/E15 bias.
+
+DEBUGGING
+---------
+X/Y/Z now each display the exact bright-paint binary mask used for sibling selection.
+If Z is visually partial, the debug mask should also visibly show only that bright half.
+
+VISIBLE VERSION
+---------------
+PPAI JS v0.13.18
