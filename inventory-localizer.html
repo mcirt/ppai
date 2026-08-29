@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PPAI Inventory Silhouette Localizer v0.13.7</title>
+<title>PPAI Whole Inventory Cluster Localizer v0.13.12</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
@@ -47,13 +47,15 @@ input[type=file]{position:absolute;left:-9999px}
 </head>
 <body>
 <main>
-  <h1>Inventory Silhouette Localizer</h1>
-  <div class="version">PPAI JS v0.13.10 — Inventory Silhouette Localization</div>
+  <h1>Whole Inventory Cluster Localizer</h1>
+  <div class="version">PPAI JS v0.13.12 — Whole-Cluster Inventory Localization</div>
 
   <div class="card">
     <div class="note">
-      <strong>Standalone test only.</strong> This does not change the solver or enter tiles.
-      Take one photo containing the three overlapping inventory plaques. v0.13.10 intentionally uses the exact known-good v0.13.7 inventory localization/cropping code. No scanner geometry, OpenCV startup, camera, or recognition logic was rewritten in this release.
+      <strong>v0.13.12 locator experiment.</strong> Camera/OpenCV startup and the short exact-viewfinder capture are preserved.
+      The scanner now searches for the <strong>complete overlapping X/Y/Z plaque cluster</strong> as one object.
+      Emoji interiors and rune artwork are ignored for localization. The three bronze rims are supporting evidence only —
+      <strong>there is no three-circle prerequisite.</strong>
     </div>
     <div class="actions camera-actions">
       <button id="startCameraButton" class="primary" type="button">Open Camera</button>
@@ -64,11 +66,11 @@ input[type=file]{position:absolute;left:-9999px}
     <input id="photoInput" type="file" accept="image/*">
     <div id="cameraWrap" class="camera-wrap" hidden>
       <video id="cameraVideo" playsinline muted></video>
-      <div class="camera-hint">Center the three overlapping inventory plaques — no X/Y/Z alignment circles.</div>
+      <div class="camera-hint">Put the complete three-plaque inventory cluster in the short viewfinder. No alignment circles required.</div>
     </div>
     <button id="stopCameraButton" class="secondary stop-camera" type="button" disabled>Stop Camera</button>
     <div id="opencvStatus" class="small" style="margin-top:8px">Checking OpenCV…</div>
-    <div id="status">Waiting for a photo.</div>
+    <div id="status">Waiting for a photo.</div><div id="clusterDebug" class="small" style="margin-top:7px"></div>
 
     <div class="stage" id="stage" hidden>
       <canvas id="sourceCanvas"></canvas>
@@ -93,27 +95,29 @@ input[type=file]{position:absolute;left:-9999px}
     </div>
     <div id="recognitionSummary" class="recognition-summary">Recognition has not run yet.</div>
     <p class="small">
-      These are fixed canonical X/Y/Z crops after the detected inventory object has been
-      translated, scaled, and rotation-corrected. Emoji classification is intentionally
-      now connected for review in v0.13.7. Recognition results do not write to the solver.
+      These are fixed X/Y/Z crops derived from the whole-cluster registration. Recognition uses the color family first, then compares only the three sibling shapes in that family. Results remain review-only.
     </p>
   </div>
 
   <div class="card">
-    <h2 style="margin:0 0 7px">Reference used by v0.13.7</h2>
+    <h2 style="margin:0 0 7px">Real whole-cluster template used by v0.13.12</h2>
     <div class="ref-preview">
-      <div><div class="small">Exact-pixel crop from original screenshot</div><img src="images/inventory_reference_v0137.png?v=0137"></div>
-      <div><div class="small">Clean geometry support mask — rims + permanent plaque edges only</div><img src="images/inventory_reference_mask_v0137.png?v=0137"></div>
+      <div><div class="small">Real screenshot crop — pixel reference</div><img src="images/inventory_cluster_reference_v01312.png?v=01312"></div>
+      <div><div class="small">Permanent-geometry template preview</div><img src="images/inventory_cluster_template_preview_v01312.png?v=01312"></div>
+    </div>
+    <div class="ref-preview" style="margin-top:8px">
+      <div><div class="small">Primary body/silhouette mask</div><img src="images/inventory_cluster_body_mask_v01312.png?v=01312"></div>
+      <div><div class="small">Permanent edge/rim support mask</div><img src="images/inventory_cluster_edge_mask_v01312.png?v=01312"></div>
     </div>
     <p class="small">
-      This mask is drawn from measured geometry on the original screenshot. It is not threshold-generated. The changing emoji interiors and background are excluded.
+      These assets are derived deterministically from the user's real inventory screenshot. The AI-generated geometry illustration was used only as design guidance; it is not a pixel-matching template.
     </p>
   </div>
 </main>
 
 <script src="js/opencv.js?v=0137"></script>
 <script src="js/opencv-loader.js?v=0137"></script>
-<script src="js/inventory-reference-v0137.js?v=0137"></script>
-<script src="js/ppai-inventory-localizer-v0137.js?v=0137"></script>
+<script src="js/inventory-cluster-reference-v01312.js?v=01312"></script>
+<script src="js/ppai-inventory-cluster-v01312.js?v=01312"></script>
 </body>
 </html>

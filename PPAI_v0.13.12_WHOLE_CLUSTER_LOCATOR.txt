@@ -1,0 +1,31 @@
+PPAI JS v0.13.12 — WHOLE-CLUSTER INVENTORY LOCATOR
+
+WHAT CHANGED
+- New inventory localization experiment based on the complete overlapping X/Y/Z plaque cluster.
+- The real user screenshot is the canonical pixel reference.
+- A real-perspective body/silhouette mask is the primary localization evidence.
+- Permanent plaque edges, overlap seams, and bronze rim annuli provide secondary evidence.
+- There is NO requirement to detect three independent circles before localization.
+- After whole-cluster registration, X/Y/Z locations are fixed and cropped deterministically.
+- Emoji recognition remains two-stage:
+  1) color family (3 candidates)
+  2) sibling shape within that family.
+
+FROZEN / PRESERVED
+- OpenCV loader/startup
+- in-page camera launch
+- short viewfinder
+- exact visible-viewfinder capture
+- game logic
+- solver search strategy
+- Stop Search button
+
+TEMPLATE SOURCE
+The matching assets are derived from:
+57B42BB5-A3C6-4AFF-A8FD-A7E32DF334AA.jpeg
+
+The AI-generated template infographic is NOT used as a pixel template.
+It was used only to clarify the intended geometry and matching architecture.
+
+VISIBLE VERSION
+PPAI JS v0.13.12

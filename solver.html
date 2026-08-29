@@ -83,7 +83,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <body>
 <div id="calculated-score" class="calculated-score"><span class="label">CALCULATED FINAL SCORE</span><strong id="calculated-score-value">Calculating…</strong></div>
 <h1>Puzzle Pyramid Solver</h1>
-<div class="version">Puzzle Pyramid AI JS v0.10.1 — Sliding Inventory Window</div>
+<div class="version">Puzzle Pyramid AI JS v0.13.12 — Solver + Stop Search</div>
 <div id="score">Score: 0</div>
 <div id="flash-points"></div>
 <div id="pyramid"></div>
@@ -134,7 +134,7 @@ h1 { text-align:center; margin:0 0 4px; }
 <div class="download-row">
   <button id="download-button">Download Solver Log</button>
 </div>
-<div class="solver-note"><strong>PPAI v0.13.10:</strong> manual STOP SEARCH safely ends calculation at cooperative checkpoints and keeps the best plan found so far. v0.9.8 keeps the STANDARD fast path and Known Demo restart fix, and makes playback counters persistent: Draw, RESET, and Match/Clear/Hold/Match-Hold counters remain visible until the next action changes them; Pause no longer clears them; Back and Restart restore the correct counter state for that playback snapshot. STANDARD it skips backward Endgame-First generation, Reachability, LITP, and lane validation, then goes directly to the 8260 Perfect Score Probe and forward full-plan search. DEEP keeps the complete backward endgame/reachability/LITP pipeline and uses its result as forward-search guidance. Both modes retain inventory-wave reasoning, post-reset projection, Hold Corridor skills, playback snapshots, and the four transport controls. Playback Speed includes Ultra 0.30 sec. Final scoring now awards 50 points for every tile still remaining when Tile 1 is cleared, including one tile in Hold if occupied. v0.10.1 matches the real-game sliding inventory window: with 3 or more surviving in-play inventory tiles, the three highest survivors fill X/Y/Z; with 2 survivors they occupy X/Y; with 1 survivor it occupies X. The rightmost occupied visible slot is playable. With Hold empty, dragging a playable tile onto a complementary blocked tile is accepted only when holding the source would immediately expose that target; internally it remains canonical HOLD + MATCH_HOLD.</div>
+<div class="solver-note"><strong>PPAI v0.13.12</strong> — Stop Search keeps the best plan found so far.</div>
 <div class="search-stats">
   <div class="search-stat"><strong id="decisionStates">0</strong><span class="search-label">states this decision</span></div>
   <div class="search-stat"><strong id="totalStates">0</strong><span class="search-label">states this solver run</span></div>
