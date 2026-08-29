@@ -1,0 +1,37 @@
+PPAI JS v0.13.15 — MASK-FIRST INVENTORY TEST
+
+Purpose
+-------
+This is a diagnostic pivot. It tests whether the exact short-viewfinder photo can be
+converted into a reliable black-and-white mask where the three pale inventory plaques
+become one dominant central object.
+
+Preserved byte-for-byte
+-----------------------
+- js/opencv.js
+- js/opencv-loader.js
+- game.html
+
+Preserved behavior
+------------------
+- Rear camera launch
+- Short camera viewfinder
+- Exact visible-viewfinder capture
+- Solver Stop Search
+- Solver default playback: Ultra 0.30 sec
+
+Changed
+-------
+- inventory-localizer.html now shows:
+  1) exact captured photo
+  2) raw black/white plaque mask
+  3) morphology-cleaned mask with best central connected candidate
+- Three mask presets: Balanced / Strict / Loose.
+- No emoji recognition is trusted in this build.
+- No green whole-cluster lock from generic edge scores.
+- Candidate selection uses only centrality, size, aspect ratio, and mask fill as a diagnostic.
+
+Next decision
+-------------
+If real tests show one clean white three-plaque object, the next build will:
+mask -> silhouette match -> normalization -> fixed X/Y/Z -> existing emoji recognizer.

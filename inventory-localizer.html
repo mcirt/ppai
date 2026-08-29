@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PPAI Whole Inventory Cluster Localizer v0.13.14</title>
+<title>PPAI Mask-First Inventory Test v0.13.15</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
@@ -43,18 +43,27 @@ input[type=file]{position:absolute;left:-9999px}
 .ref-preview{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ref-preview img{width:100%;height:auto;border-radius:7px;background:#111}
 @media(max-width:520px){main{padding:9px}.actions{grid-template-columns:1fr 1fr}.metrics{grid-template-columns:1fr 1fr}.card{padding:9px}.camera-wrap{height:190px}.camera-actions button,.camera-actions .file-label{padding:11px 7px;font-size:14px}}
+
+.mask-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px}
+.mask-panel{background:#fff;border:1px solid #cbd3db;border-radius:10px;padding:9px}
+.mask-panel h3{margin:0 0 7px;font-size:17px}
+.mask-panel canvas{display:block;width:100%;height:auto;max-height:44vh;object-fit:contain;background:#000;border-radius:8px}
+.diagnostic-note{margin-top:10px;padding:10px;border-radius:8px;background:#eef6ff;border:1px solid #86add3;line-height:1.4}
+@media(min-width:720px){.mask-grid{grid-template-columns:repeat(3,1fr)}}
 </style>
 </head>
 <body>
 <main>
-  <h1>Whole Inventory Cluster Localizer</h1>
-  <div class="version">PPAI JS v0.13.14 — Tight Contour Inventory Localization</div>
+  <h1>Mask-First Inventory Test</h1>
+  <div class="version">PPAI JS v0.13.15 — Black/White Inventory Mask Experiment</div>
 
   <div class="card">
     <div class="note">
-      <strong>v0.13.14 locator experiment.</strong> Camera/OpenCV startup and the short exact-viewfinder capture are preserved.
-      The scanner now locks to a <strong>tight outer contour plus the two overlap seams</strong>. The template itself is no longer inflated; photographic tolerance is scored separately in a thin band.
-      Emoji interiors and rune artwork are ignored for localization. The two overlap seams are strongly weighted because they make the cluster distinctive. Bronze rims remain supporting evidence only — <strong>there is still no three-circle prerequisite.</strong>
+      <strong>v0.13.15 mask-first experiment.</strong>
+      The working OpenCV startup, rear-camera launch, short viewfinder, and exact-viewfinder capture are preserved.
+      After capture, the scanner converts the photo into a <strong>black-and-white plaque-material mask</strong>,
+      cleans it, and looks for one central connected shape with the expected three-plaque proportions.
+      <strong>This build deliberately stops before emoji recognition.</strong> First we prove that the mask itself is reliable.
     </div>
     <div class="actions camera-actions">
       <button id="startCameraButton" class="primary" type="button">Open Camera</button>
@@ -68,65 +77,55 @@ input[type=file]{position:absolute;left:-9999px}
       <div class="camera-hint">Put the complete three-plaque inventory cluster in the short viewfinder. No alignment circles required.</div>
     </div>
     <button id="stopCameraButton" class="secondary stop-camera" type="button" disabled>Stop Camera</button>
+    <div style="margin-top:10px">
+      <label style="font-weight:800">Mask preset:
+        <select id="maskPreset" style="font-size:16px;padding:7px;border-radius:7px">
+          <option value="balanced" selected>Balanced</option>
+          <option value="strict">Strict — less background</option>
+          <option value="loose">Loose — more plaque pixels</option>
+        </select>
+      </label>
+    </div>
     <div id="opencvStatus" class="small" style="margin-top:8px">Checking OpenCV…</div>
     <div id="status">Waiting for a photo.</div><div id="clusterDebug" class="small" style="margin-top:7px"></div>
 
-    <div class="stage" id="stage" hidden>
-      <canvas id="sourceCanvas"></canvas>
-      <canvas id="overlayCanvas"></canvas>
+    <div id="resultGrid" hidden>
+      <div class="mask-grid">
+        <div class="mask-panel">
+          <h3>1. Exact captured photo</h3>
+          <canvas id="sourceCanvas"></canvas>
+          <p class="small">These are the exact pixels visible in the short viewfinder when Take Photo was tapped.</p>
+        </div>
+        <div class="mask-panel">
+          <h3>2. Raw black / white mask</h3>
+          <canvas id="maskCanvas"></canvas>
+          <p class="small">White = pixels whose brightness/saturation resemble the pale inventory plaque material.</p>
+        </div>
+        <div class="mask-panel">
+          <h3>3. Cleaned mask + best candidate</h3>
+          <canvas id="cleanedCanvas" style="display:none"></canvas>
+          <canvas id="candidateCanvas"></canvas>
+          <p id="candidateInfo" class="small"></p>
+        </div>
+      </div>
+      <div class="diagnostic-note">
+        <strong>What we are testing:</strong> do the three overlapping inventory plaques become one obvious white object while DRAW, HOLD, pyramid tiles, and the background stay mostly black?
+        If yes, the next build can match that silhouette and only then derive X/Y/Z.
+      </div>
     </div>
 
-    <div class="metrics" id="metrics" hidden>
-      <div class="metric">Template fit<b id="fitScore">—</b></div>
-      <div class="metric">Overall confidence<b id="overallScore">—</b></div>
-      <div class="metric">Scale<b id="scaleScore">—</b></div>
-      <div class="metric">Rotation<b id="rotationScore">—</b></div>
+    <div class="card" style="margin-top:12px">
+      <h2 style="margin:0 0 7px">v0.13.15 test rule</h2>
+      <p class="small">
+        No green “LOCKED” result is allowed merely because generic edges look similar.
+        This experiment exposes the actual B&W mask first so we can judge whether mask-first localization is viable.
+        Emoji recognition from v0.13.14 is intentionally not used in this test.
+      </p>
     </div>
-  </div>
-
-  <div class="card" id="normalizedCard" hidden>
-    <h2 style="margin:0 0 7px">Normalized Inventory Region</h2>
-    <canvas id="normalizedCanvas" width="890" height="610"></canvas>
-    <div class="crop-grid">
-      <div class="crop"><b>X crop</b><canvas id="cropX" width="190" height="190"></canvas><div id="readX" class="reading">—</div><span id="rimX" class="small"></span></div>
-      <div class="crop"><b>Y crop</b><canvas id="cropY" width="190" height="190"></canvas><div id="readY" class="reading">—</div><span id="rimY" class="small"></span></div>
-      <div class="crop"><b>Z crop</b><canvas id="cropZ" width="190" height="190"></canvas><div id="readZ" class="reading">—</div><span id="rimZ" class="small"></span></div>
-    </div>
-    <div id="recognitionSummary" class="recognition-summary">Recognition has not run yet.</div>
-    <p class="small">
-      These are fixed X/Y/Z crops derived from the whole-cluster registration. Recognition uses the color family first, then compares only the three sibling shapes in that family. Results remain review-only.
-    </p>
-  </div>
-
-  <div class="card">
-    <h2 style="margin:0 0 7px">Tight contour template used by v0.13.14</h2>
-    <div class="ref-preview">
-      <div><div class="small">Real screenshot crop — pixel reference</div><img src="images/inventory_cluster_reference_v01314.png?v=01314"></div>
-      <div><div class="small">Permanent-geometry template preview</div><img src="images/inventory_cluster_template_preview_v01314.png?v=01314"></div>
-    </div>
-    <div class="ref-preview" style="margin-top:8px">
-      <div><div class="small">Exact contour + seam mask</div><img src="images/inventory_cluster_exact_contour_v01314.png?v=01314"></div>
-      <div><div class="small">Thin tolerance band (scoring only)</div><img src="images/inventory_cluster_tolerance_band_v01314.png?v=01314"></div>
-    </div>
-    <p class="small">
-      These assets are derived deterministically from the user's real inventory screenshot. The AI-generated geometry illustration was used only as design guidance; it is not a pixel-matching template.
-    </p>
-  </div>
-
-  <section class="card">
-    <h2 style="margin:0 0 7px">v0.13.14 lock assets</h2>
-    <p class="small">These are the three assets used to judge the whole inventory cluster: the exact contour, its thin scoring-only tolerance band, and the registered template preview.</p>
-    <div class="refgrid">
-      <div><div class="small">Exact contour mask</div><img src="images/exact_contour_preview.png?v=01314"></div>
-      <div><div class="small">Tolerance band</div><img src="images/tolerance_band_preview.png?v=01314"></div>
-      <div><div class="small">Template preview</div><img src="images/template_preview.png?v=01314"></div>
-    </div>
-  </section>
 </main>
 
 <script src="js/opencv.js?v=0137"></script>
 <script src="js/opencv-loader.js?v=0137"></script>
-<script src="js/inventory-cluster-reference-v01314.js?v=01314"></script>
-<script src="js/ppai-inventory-cluster-v01314.js?v=01314"></script>
+<script src="js/ppai-inventory-maskfirst-v01315.js?v=01315"></script>
 </body>
 </html>
