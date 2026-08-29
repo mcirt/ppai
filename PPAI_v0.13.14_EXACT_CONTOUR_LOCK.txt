@@ -1,0 +1,17 @@
+PPAI JS v0.13.14 — EXACT CONTOUR LOCK
+
+Scanner:
+- exact tight whole-cluster contour derived from real screenshot geometry
+- thin tolerance band is scoring-only; template is not inflated
+- scoring: outer contour 45%, overlap seams 30%, body 10%, rims 8%, outside penalty 7%
+- two-pass coarse search then local refinement
+- X/Y/Z crops remain fixed after cluster registration
+- emoji recognition pipeline preserved
+- OpenCV startup, camera launch, and short exact-viewfinder capture preserved
+
+Solver:
+- visible header updated to v0.13.14
+- internal log VERSION updated to v0.13.14
+- STOP SEARCH — KEEP BEST FOUND preserved
+- default playback Ultra · 0.30 sec preserved
+- long solver description under Download Solver Log removed

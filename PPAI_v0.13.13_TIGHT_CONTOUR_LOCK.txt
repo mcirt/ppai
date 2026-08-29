@@ -1,0 +1,38 @@
+PPAI JS v0.13.13 — TIGHT CONTOUR LOCK
+
+SCANNER CHANGES ONLY
+- Replaced the bloated v0.13.12 body silhouette as the primary locator.
+- New exact outer contour is tightly traced from the real inventory screenshot.
+- Tolerance is now a separate thin scoring band; the template itself is not inflated.
+- Overlap seams X/Y and Y/Z are scored separately and heavily.
+- Scoring weights:
+  * exact outer contour 40%
+  * overlap seams 30%
+  * plaque body probes 15%
+  * bronze rims 10% support only
+  * outside penalty 5%
+- Search is explicitly two-pass:
+  1) coarse scale/rotation/position search
+  2) fine local refinement around best candidate
+- Debug overlay:
+  * red = exact contour
+  * green = tolerance band
+  * yellow = overlap seams
+  * cyan/yellow/green = X/Y/Z rim/crop anchors
+- Emoji recognition pipeline is unchanged from v0.13.12.
+
+SOLVER UI CHANGE
+- Default playback speed is now Ultra · 0.30 sec.
+- solverPreviewMs defaults to 300 ms.
+- Stop Search and solver strategy are unchanged.
+
+FROZEN
+- OpenCV loader/startup
+- OpenCV build
+- camera launch
+- short viewfinder
+- exact visible-viewfinder capture
+- game.html
+
+VISIBLE VERSION
+PPAI JS v0.13.13

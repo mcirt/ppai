@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PPAI Whole Inventory Cluster Localizer v0.13.12</title>
+<title>PPAI Whole Inventory Cluster Localizer v0.13.14</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
@@ -48,14 +48,13 @@ input[type=file]{position:absolute;left:-9999px}
 <body>
 <main>
   <h1>Whole Inventory Cluster Localizer</h1>
-  <div class="version">PPAI JS v0.13.12 — Whole-Cluster Inventory Localization</div>
+  <div class="version">PPAI JS v0.13.14 — Tight Contour Inventory Localization</div>
 
   <div class="card">
     <div class="note">
-      <strong>v0.13.12 locator experiment.</strong> Camera/OpenCV startup and the short exact-viewfinder capture are preserved.
-      The scanner now searches for the <strong>complete overlapping X/Y/Z plaque cluster</strong> as one object.
-      Emoji interiors and rune artwork are ignored for localization. The three bronze rims are supporting evidence only —
-      <strong>there is no three-circle prerequisite.</strong>
+      <strong>v0.13.14 locator experiment.</strong> Camera/OpenCV startup and the short exact-viewfinder capture are preserved.
+      The scanner now locks to a <strong>tight outer contour plus the two overlap seams</strong>. The template itself is no longer inflated; photographic tolerance is scored separately in a thin band.
+      Emoji interiors and rune artwork are ignored for localization. The two overlap seams are strongly weighted because they make the cluster distinctive. Bronze rims remain supporting evidence only — <strong>there is still no three-circle prerequisite.</strong>
     </div>
     <div class="actions camera-actions">
       <button id="startCameraButton" class="primary" type="button">Open Camera</button>
@@ -100,24 +99,34 @@ input[type=file]{position:absolute;left:-9999px}
   </div>
 
   <div class="card">
-    <h2 style="margin:0 0 7px">Real whole-cluster template used by v0.13.12</h2>
+    <h2 style="margin:0 0 7px">Tight contour template used by v0.13.14</h2>
     <div class="ref-preview">
-      <div><div class="small">Real screenshot crop — pixel reference</div><img src="images/inventory_cluster_reference_v01312.png?v=01312"></div>
-      <div><div class="small">Permanent-geometry template preview</div><img src="images/inventory_cluster_template_preview_v01312.png?v=01312"></div>
+      <div><div class="small">Real screenshot crop — pixel reference</div><img src="images/inventory_cluster_reference_v01314.png?v=01314"></div>
+      <div><div class="small">Permanent-geometry template preview</div><img src="images/inventory_cluster_template_preview_v01314.png?v=01314"></div>
     </div>
     <div class="ref-preview" style="margin-top:8px">
-      <div><div class="small">Primary body/silhouette mask</div><img src="images/inventory_cluster_body_mask_v01312.png?v=01312"></div>
-      <div><div class="small">Permanent edge/rim support mask</div><img src="images/inventory_cluster_edge_mask_v01312.png?v=01312"></div>
+      <div><div class="small">Exact contour + seam mask</div><img src="images/inventory_cluster_exact_contour_v01314.png?v=01314"></div>
+      <div><div class="small">Thin tolerance band (scoring only)</div><img src="images/inventory_cluster_tolerance_band_v01314.png?v=01314"></div>
     </div>
     <p class="small">
       These assets are derived deterministically from the user's real inventory screenshot. The AI-generated geometry illustration was used only as design guidance; it is not a pixel-matching template.
     </p>
   </div>
+
+  <section class="card">
+    <h2 style="margin:0 0 7px">v0.13.14 lock assets</h2>
+    <p class="small">These are the three assets used to judge the whole inventory cluster: the exact contour, its thin scoring-only tolerance band, and the registered template preview.</p>
+    <div class="refgrid">
+      <div><div class="small">Exact contour mask</div><img src="images/exact_contour_preview.png?v=01314"></div>
+      <div><div class="small">Tolerance band</div><img src="images/tolerance_band_preview.png?v=01314"></div>
+      <div><div class="small">Template preview</div><img src="images/template_preview.png?v=01314"></div>
+    </div>
+  </section>
 </main>
 
 <script src="js/opencv.js?v=0137"></script>
 <script src="js/opencv-loader.js?v=0137"></script>
-<script src="js/inventory-cluster-reference-v01312.js?v=01312"></script>
-<script src="js/ppai-inventory-cluster-v01312.js?v=01312"></script>
+<script src="js/inventory-cluster-reference-v01314.js?v=01314"></script>
+<script src="js/ppai-inventory-cluster-v01314.js?v=01314"></script>
 </body>
 </html>
