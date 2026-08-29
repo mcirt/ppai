@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PPAI Inventory Scanner v0.13.22</title>
+<title>PPAI Inventory Scanner v0.13.23</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
@@ -57,13 +57,13 @@ input[type=file]{position:absolute;left:-9999px}
 <body>
 <main>
   <h1>Mask + Dark-Hole Inventory Test</h1>
-  <div class="version">PPAI JS v0.13.22 — Dark-Window Primary + Solid-Envelope Contour Fallback + Adaptive Bright-Paint Recognition</div>
+  <div class="version">PPAI JS v0.13.23 — 3-Circle Primary + 2-Circle Inference + Silhouette Last Resort + Adaptive Bright-Paint Recognition</div>
 
   <div class="card">
     <div class="note">
-      <strong>v0.13.22 solid-envelope contour fallback experiment.</strong>
+      <strong>v0.13.23 geometry-consensus experiment.</strong>
       The working OpenCV startup, rear-camera launch, short viewfinder, and exact-viewfinder capture are preserved.
-      After capture, the scanner converts the photo into a <strong>black-and-white plaque-material mask</strong>. It then looks for the three large <strong>enclosed dark emoji windows</strong> inside that mask and requires them to satisfy X/Y/Z spacing, size, and alignment rules. Only after that geometry locks does the existing emoji recognizer run.
+      After capture, the scanner converts the photo into a <strong>black-and-white plaque-material mask</strong>. It first tries to lock three large <strong>enclosed dark emoji windows</strong>. Their radii must be nearly uniform, so a tiny speck cannot become a fake third circle. If only two trustworthy same-size windows survive, the scanner uses their spacing and angle to infer the missing X/Y/Z position. The silhouette is now the last-resort geometry path. Only after geometry locks does the existing emoji recognizer run.
     </div>
     <div class="actions camera-actions">
       <button id="startCameraButton" class="primary" type="button">Open Camera</button>
@@ -119,21 +119,21 @@ input[type=file]{position:absolute;left:-9999px}
         <div id="recognitionSummary" class="recognition-summary"></div>
       </div>
       <div class="diagnostic-note">
-        <strong>Lock rule:</strong> three trustworthy enclosed dark windows remain the PRIMARY geometry path. If that triplet is missing or weak, the scanner falls back to the real-snapshot whole-cluster silhouette and uses its stored X/Y/Z geometry. Emoji recognition is unchanged.
+        <strong>Lock rule:</strong> (1) three trustworthy same-size dark windows, (2) two trustworthy same-size windows + inferred third, (3) silhouette last resort. A three-circle candidate is rejected if largest/smallest radius exceeds 1.38×; a two-circle anchor pair must agree within 1.25×. Emoji recognition is unchanged.
       </div>
     </div>
 
     <div class="card" style="margin-top:12px">
-      <h2 style="margin:0 0 7px">v0.13.22 geometry rule</h2>
+      <h2 style="margin:0 0 7px">v0.13.23 geometry rule</h2>
       <p class="small">
-        Three dark-window geometry is tried first and remains untouched when it locks at 66% or better. If it cannot lock, the scanner registers the previously measured whole three-plaque silhouette from a real snapshot (normalized aspect ≈1.571:1), predicts X/Y/Z from the stored template geometry, and only then runs the unchanged adaptive bright-paint emoji classifier. This is intended to rescue cases such as a glowing unmatched Z whose interior disappears from the dark-hole mask.
+        Three-window geometry is tried first at a 66% lock threshold, with a hard uniform-size gate. If that does not lock, two trustworthy dark windows can establish the inventory spacing, angle, and scale; the missing position is inferred rather than filled by an unrelated speck. The two-circle path locks at 64% and can locally refine the predicted position only with a nearby component of matching size. The approved tight silhouette is attempted only after those circle-based paths fail. The adaptive bright-paint emoji classifier is unchanged in this build.
       </p>
     </div>
 </main>
 
 <script src="js/opencv.js?v=0137"></script>
 <script src="js/opencv-loader.js?v=0137"></script>
-<script src="js/inventory-cluster-reference-v01322.js?v=01322"></script>
-<script src="js/ppai-inventory-maskholes-v01322.js?v=01322"></script>
+<script src="js/inventory-cluster-reference-v01323.js?v=01323"></script>
+<script src="js/ppai-inventory-maskholes-v01323.js?v=01323"></script>
 </body>
 </html>

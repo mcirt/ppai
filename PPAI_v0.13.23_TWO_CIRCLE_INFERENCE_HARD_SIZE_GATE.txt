@@ -1,0 +1,18 @@
+PPAI v0.13.23 — TWO-CIRCLE INFERENCE + HARD SIZE GATE
+
+Geometry order:
+1. Three trustworthy dark windows remain the primary path.
+2. HARD RULE: a 3-circle triplet is rejected if largest radius / smallest radius > 1.38.
+3. If no 3-circle lock, find two trustworthy anchors with radius ratio <= 1.25.
+4. Infer the missing X/Y/Z center from equal spacing and angle.
+5. A nearby dark component may refine the inferred center only if its radius agrees within 1.30x.
+6. Only if the 2-circle path is unavailable/weak does the approved silhouette fallback run.
+
+Recognition:
+- Adaptive bright-paint classifier is intentionally unchanged in this build.
+- This build is focused on geometry stability and preventing tiny-speck false third circles.
+
+Preserved:
+- OpenCV build/camera/viewfinder capture.
+- Approved v0.13.21 silhouette PNG.
+- Solver STOP SEARCH behavior and playback defaults.
