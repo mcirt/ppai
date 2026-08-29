@@ -1,0 +1,17 @@
+PPAI v0.13.21 — APPROVED TIGHT SILHOUETTE FALLBACK
+
+PRIMARY PATH (unchanged):
+- Existing three-dark-window X/Y/Z detector.
+- If it locks strongly, silhouette fallback does not run.
+
+FALLBACK PATH:
+- images/inventory_cluster_silhouette_v01321.png
+- This file is a byte-for-byte copy of the silhouette candidate approved in chat.
+- It is NOT dilated, smoothed, inflated, stretched, or forced to 1.576:1.
+- The scanner loads it at its native 1011 x 719 canvas dimensions.
+- Measured white-shape bounding box is 963 x 671 (W:H = 1.4352:1).
+- Matching tolerance is applied only by the edge-support scoring code.
+- X/Y/Z centers are stored relative to this exact template geometry.
+
+EMOJI RECOGNITION:
+- Adaptive bright-paint recognition remains the existing v0.13.18-derived pipeline.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PPAI Inventory Scanner v0.13.20</title>
+<title>PPAI Inventory Scanner v0.13.21</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
@@ -57,11 +57,11 @@ input[type=file]{position:absolute;left:-9999px}
 <body>
 <main>
   <h1>Mask + Dark-Hole Inventory Test</h1>
-  <div class="version">PPAI JS v0.13.20 — Dark-Window Primary + Silhouette Fallback + Adaptive Bright-Paint Recognition</div>
+  <div class="version">PPAI JS v0.13.21 — Dark-Window Primary + Silhouette Fallback + Adaptive Bright-Paint Recognition</div>
 
   <div class="card">
     <div class="note">
-      <strong>v0.13.20 geometry fallback experiment.</strong>
+      <strong>v0.13.21 geometry fallback experiment.</strong>
       The working OpenCV startup, rear-camera launch, short viewfinder, and exact-viewfinder capture are preserved.
       After capture, the scanner converts the photo into a <strong>black-and-white plaque-material mask</strong>. It then looks for the three large <strong>enclosed dark emoji windows</strong> inside that mask and requires them to satisfy X/Y/Z spacing, size, and alignment rules. Only after that geometry locks does the existing emoji recognizer run.
     </div>
@@ -124,7 +124,7 @@ input[type=file]{position:absolute;left:-9999px}
     </div>
 
     <div class="card" style="margin-top:12px">
-      <h2 style="margin:0 0 7px">v0.13.20 geometry rule</h2>
+      <h2 style="margin:0 0 7px">v0.13.21 geometry rule</h2>
       <p class="small">
         Three dark-window geometry is tried first and remains untouched when it locks at 66% or better. If it cannot lock, the scanner registers the previously measured whole three-plaque silhouette from a real snapshot (normalized aspect ≈1.571:1), predicts X/Y/Z from the stored template geometry, and only then runs the unchanged adaptive bright-paint emoji classifier. This is intended to rescue cases such as a glowing unmatched Z whose interior disappears from the dark-hole mask.
       </p>
@@ -133,7 +133,7 @@ input[type=file]{position:absolute;left:-9999px}
 
 <script src="js/opencv.js?v=0137"></script>
 <script src="js/opencv-loader.js?v=0137"></script>
-<script src="js/inventory-cluster-reference-v01314.js?v=01314"></script>
-<script src="js/ppai-inventory-maskholes-v01320.js?v=01319"></script>
+<script src="js/inventory-cluster-reference-v01321.js?v=01314"></script>
+<script src="js/ppai-inventory-maskholes-v01321.js?v=01321"></script>
 </body>
 </html>
