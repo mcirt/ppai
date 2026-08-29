@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PPAI Mask-First Inventory Test v0.13.15</title>
+<title>PPAI Mask + Dark-Hole Inventory Test v0.13.16</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
@@ -48,22 +48,21 @@ input[type=file]{position:absolute;left:-9999px}
 .mask-panel{background:#fff;border:1px solid #cbd3db;border-radius:10px;padding:9px}
 .mask-panel h3{margin:0 0 7px;font-size:17px}
 .mask-panel canvas{display:block;width:100%;height:auto;max-height:44vh;object-fit:contain;background:#000;border-radius:8px}
+#sourceOverlayCanvas{width:100%;height:auto;max-height:44vh;object-fit:contain;background:#000;border-radius:8px}
 .diagnostic-note{margin-top:10px;padding:10px;border-radius:8px;background:#eef6ff;border:1px solid #86add3;line-height:1.4}
 @media(min-width:720px){.mask-grid{grid-template-columns:repeat(3,1fr)}}
 </style>
 </head>
 <body>
 <main>
-  <h1>Mask-First Inventory Test</h1>
-  <div class="version">PPAI JS v0.13.15 — Black/White Inventory Mask Experiment</div>
+  <h1>Mask + Dark-Hole Inventory Test</h1>
+  <div class="version">PPAI JS v0.13.16 — Mask + X/Y/Z Dark-Window Geometry</div>
 
   <div class="card">
     <div class="note">
-      <strong>v0.13.15 mask-first experiment.</strong>
+      <strong>v0.13.16 geometry experiment.</strong>
       The working OpenCV startup, rear-camera launch, short viewfinder, and exact-viewfinder capture are preserved.
-      After capture, the scanner converts the photo into a <strong>black-and-white plaque-material mask</strong>,
-      cleans it, and looks for one central connected shape with the expected three-plaque proportions.
-      <strong>This build deliberately stops before emoji recognition.</strong> First we prove that the mask itself is reliable.
+      After capture, the scanner converts the photo into a <strong>black-and-white plaque-material mask</strong>. It then looks for the three large <strong>enclosed dark emoji windows</strong> inside that mask and requires them to satisfy X/Y/Z spacing, size, and alignment rules. Only after that geometry locks does the existing emoji recognizer run.
     </div>
     <div class="actions camera-actions">
       <button id="startCameraButton" class="primary" type="button">Open Camera</button>
@@ -102,30 +101,37 @@ input[type=file]{position:absolute;left:-9999px}
           <p class="small">White = pixels whose brightness/saturation resemble the pale inventory plaque material.</p>
         </div>
         <div class="mask-panel">
-          <h3>3. Cleaned mask + best candidate</h3>
+          <h3>3. Cleaned mask + dark-window triplet</h3>
           <canvas id="cleanedCanvas" style="display:none"></canvas>
           <canvas id="candidateCanvas"></canvas>
           <p id="candidateInfo" class="small"></p>
         </div>
       </div>
+      <div class="mask-panel" style="margin-top:10px">
+        <h3>4. Geometry-derived X/Y/Z on the real photo</h3>
+        <canvas id="sourceOverlayCanvas"></canvas>
+        <div class="crop-grid">
+          <div class="crop"><b>X</b><canvas id="cropX"></canvas><div id="readX" class="reading">—</div></div>
+          <div class="crop"><b>Y</b><canvas id="cropY"></canvas><div id="readY" class="reading">—</div></div>
+          <div class="crop"><b>Z</b><canvas id="cropZ"></canvas><div id="readZ" class="reading">—</div></div>
+        </div>
+        <div id="recognitionSummary" class="recognition-summary"></div>
+      </div>
       <div class="diagnostic-note">
-        <strong>What we are testing:</strong> do the three overlapping inventory plaques become one obvious white object while DRAW, HOLD, pyramid tiles, and the background stay mostly black?
-        If yes, the next build can match that silhouette and only then derive X/Y/Z.
+        <strong>Lock rule:</strong> a white plaque-like blob is not enough. This build requires three enclosed dark windows with similar size, near-horizontal alignment, balanced spacing, and a plausible central position before emoji recognition is allowed.
       </div>
     </div>
 
     <div class="card" style="margin-top:12px">
-      <h2 style="margin:0 0 7px">v0.13.15 test rule</h2>
+      <h2 style="margin:0 0 7px">v0.13.16 test rule</h2>
       <p class="small">
-        No green “LOCKED” result is allowed merely because generic edges look similar.
-        This experiment exposes the actual B&W mask first so we can judge whether mask-first localization is viable.
-        Emoji recognition from v0.13.14 is intentionally not used in this test.
+        Generic edge scores cannot create a lock. Three dark-window geometry must pass first. Recognition then uses crops derived directly from those detected X/Y/Z windows rather than from a guessed whole-cluster transform.
       </p>
     </div>
 </main>
 
 <script src="js/opencv.js?v=0137"></script>
 <script src="js/opencv-loader.js?v=0137"></script>
-<script src="js/ppai-inventory-maskfirst-v01315.js?v=01315"></script>
+<script src="js/ppai-inventory-maskholes-v01316.js?v=01316"></script>
 </body>
 </html>

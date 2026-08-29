@@ -1,0 +1,26 @@
+PPAI JS v0.13.16 — MASK + DARK-WINDOW X/Y/Z GEOMETRY
+
+What changed
+- Keeps the v0.13.15 black/white plaque-material mask.
+- Finds enclosed BLACK components in the cleaned mask without HoughCircles.
+- Chooses a three-component X/Y/Z triplet using:
+  * near-horizontal alignment
+  * similar size
+  * balanced left/right spacing
+  * plausible central position
+- No lock is allowed from a generic connected white blob alone.
+- If geometry locks, X/Y/Z emoji crops are taken directly from the detected dark-window centers.
+- Existing two-stage emoji recognition is restored after geometry lock.
+- Fixes the v0.13.15 null debugEl error.
+
+Preserved
+- known-good OpenCV startup / build
+- rear camera launch
+- short viewfinder
+- exact visible-viewfinder capture
+- game.html
+- solver Stop Search
+- solver Ultra 0.30 sec default
+- solver search strategy
+
+No HoughCircles is used.
