@@ -1,0 +1,15 @@
+PPAI v0.13.22 — SOLID ENVELOPE / CONTOUR FALLBACK
+
+Primary path remains the v0.13.18 three-dark-window detector at 66%+.
+
+Fallback change only:
+1. Restrict B/W cleaned mask to an inventory ROI.
+2. Morphological CLOSE bridges small mask/seam gaps without permanent dilation.
+3. RETR_EXTERNAL extracts one plausible outer plaque-cluster contour.
+4. That contour is FILLED to create one solid envelope: internal emoji windows, rims, seams, symbols and glare holes disappear.
+5. The exact approved v0.13.21 silhouette PNG is reused byte-for-byte.
+6. The approved silhouette is registered against the extracted SOLID envelope (shape-vs-shape), not against the messy photograph.
+7. Lock is stricter: total shape score >=68%, edge >=58%, solid-fill >=70%.
+8. Existing adaptive bright-paint emoji recognition is unchanged.
+
+No change to camera capture, solver strategy, Stop Search, or Ultra 0.30 sec playback.
