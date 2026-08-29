@@ -1,0 +1,15 @@
+PPAI v0.13.20 — TRUE SOLID-SILHOUETTE FALLBACK
+
+PRIMARY: unchanged v0.13.18 three-dark-window detector.
+FALLBACK: only when primary cannot make a trustworthy X/Y/Z lock.
+
+The fallback template is images/inventory_cluster_solid_silhouette_v01320.png.
+It is a single filled white cluster silhouette derived from the measured outer contour of the known-good real snapshot.
+
+Fallback matching deliberately ignores:
+- emoji interiors
+- dark-window contents
+- bronze circular rims
+- overlap seams
+
+The silhouette determines cluster position/scale/rotation. Stored real-snapshot geometry then predicts X/Y/Z centers. The existing v0.13.18 adaptive bright-paint emoji classifier remains unchanged.

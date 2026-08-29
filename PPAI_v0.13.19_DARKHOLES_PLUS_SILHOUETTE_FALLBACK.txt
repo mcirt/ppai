@@ -1,0 +1,43 @@
+PPAI JS v0.13.19 — Dark-Window Primary + Whole-Cluster Silhouette Fallback
+
+TARGETED CHANGE ONLY
+
+Primary path (preserved from v0.13.18):
+- Build the existing plaque-material B/W mask.
+- Find enclosed dark emoji-window components.
+- Choose X/Y/Z by size, alignment, spacing and centrality.
+- If geometry score >= 66%, use that triplet exactly as before.
+
+Fallback path (new):
+- Runs only when the 3-dark-window path is missing or below lock threshold.
+- Uses the previously built real-snapshot whole-cluster reference from v0.13.14.
+- Exact outer contour + overlap seams + plaque-body evidence + rim support.
+- Two-pass scale / rotation / position search.
+- Lock threshold: template >=54%, contour >=44%, overlap seams >=38%.
+- Once registered, transforms the stored X/Y/Z circle centers into the live photo.
+- Uses the stored crop geometry instead of requiring a dark interior.
+- This is specifically intended to handle a glowing unmatched Z (or any other window whose dark interior disappears).
+
+REFERENCE GEOMETRY
+- Canonical reference: 1100 x 700
+- Aspect ratio: 1.571428... : 1
+- Stored circle centers (canonical pixels):
+  X = (250, 220), rim radius 175
+  Y = (535, 190), rim radius 182
+  Z = (835, 235), rim radius 181
+- Overlap seams and exact outer contour are stored in inventory-cluster-reference-v01314.js.
+
+UNCHANGED
+- OpenCV build and loader
+- Camera launch
+- Exact visible-viewfinder capture behavior
+- B/W mask formation
+- v0.13.18 adaptive bright-paint emoji family / sibling classifier
+- Solver strategy
+- Stop Search — Keep Best Found
+- Ultra playback default 0.30 sec
+
+DEBUG
+- Primary success: cyan/yellow/green dark-window circles.
+- Fallback: red whole-cluster contour, yellow overlap seams, and predicted X/Y/Z rim circles.
+- Status explicitly says PRIMARY DARK-WINDOW LOCK or SILHOUETTE FALLBACK LOCKED.
