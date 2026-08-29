@@ -1,0 +1,25 @@
+PPAI v0.13.24 — MEASURED SHALLOW-∧ INVENTORY GEOMETRY
+
+Geometry-only update based on multiple canonical inventory snapshots.
+
+Primary 3-circle path:
+- Dark-window radii remain hard-gated for uniform physical size: max/min <= 1.38x.
+- X/Y and Y/Z side lengths must be similar (ratio <= 1.35x).
+- Geometry is NOT treated as collinear.
+- Canonical triangle at Y is a shallow apex:
+    target angle XYZ ≈ 150 degrees
+    accepted angle range: 136–166 degrees
+    target apex height ≈ 0.26 of mean side length
+    accepted apex-height ratio: 0.08–0.46
+- Debug view draws a red X→Y→Z center polyline.
+
+Two-circle rescue:
+- Anchor radii must agree within 1.25x.
+- X/Y pair: infer Z by mirroring the vertical displacement across Y, not extending X→Y as a straight line.
+- Y/Z pair: infer X symmetrically.
+- X/Z pair: infer Y above the X/Z baseline using ~15-degree canonical rise.
+- Inferred geometry is validated against the same shallow-∧ triangle rules.
+- Nearby dark component can refine the inferred point only if radius agrees within 1.30x.
+
+Silhouette remains last resort.
+Adaptive bright-paint emoji recognition is not intentionally changed in this build.
