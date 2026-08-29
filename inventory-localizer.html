@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PPAI Mask + Dark-Hole Inventory Test v0.13.16</title>
+<title>PPAI Mask + Dark-Hole Inventory Test v0.13.17</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f8;color:#111;font-family:Arial,Helvetica,sans-serif}
@@ -56,11 +56,11 @@ input[type=file]{position:absolute;left:-9999px}
 <body>
 <main>
   <h1>Mask + Dark-Hole Inventory Test</h1>
-  <div class="version">PPAI JS v0.13.16 — Mask + X/Y/Z Dark-Window Geometry</div>
+  <div class="version">PPAI JS v0.13.17 — Mask + X/Y/Z Geometry + Fill-Pattern Emoji Recognition</div>
 
   <div class="card">
     <div class="note">
-      <strong>v0.13.16 geometry experiment.</strong>
+      <strong>v0.13.17 recognition experiment.</strong>
       The working OpenCV startup, rear-camera launch, short viewfinder, and exact-viewfinder capture are preserved.
       After capture, the scanner converts the photo into a <strong>black-and-white plaque-material mask</strong>. It then looks for the three large <strong>enclosed dark emoji windows</strong> inside that mask and requires them to satisfy X/Y/Z spacing, size, and alignment rules. Only after that geometry locks does the existing emoji recognizer run.
     </div>
@@ -123,7 +123,7 @@ input[type=file]{position:absolute;left:-9999px}
     </div>
 
     <div class="card" style="margin-top:12px">
-      <h2 style="margin:0 0 7px">v0.13.16 test rule</h2>
+      <h2 style="margin:0 0 7px">v0.13.17 recognition rule</h2>
       <p class="small">
         Generic edge scores cannot create a lock. Three dark-window geometry must pass first. Recognition then uses crops derived directly from those detected X/Y/Z windows rather than from a guessed whole-cluster transform.
       </p>
@@ -132,6 +132,6 @@ input[type=file]{position:absolute;left:-9999px}
 
 <script src="js/opencv.js?v=0137"></script>
 <script src="js/opencv-loader.js?v=0137"></script>
-<script src="js/ppai-inventory-maskholes-v01316.js?v=01316"></script>
+<script src="js/ppai-inventory-maskholes-v01317.js?v=01317"></script>
 </body>
 </html>

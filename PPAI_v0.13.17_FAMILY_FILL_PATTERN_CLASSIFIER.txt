@@ -1,0 +1,52 @@
+PPAI JS v0.13.17 — FAMILY + FILL-PATTERN EMOJI CLASSIFIER
+
+WHAT STAYS FROZEN
+-----------------
+- v0.13.16 black/white plaque mask
+- v0.13.16 three dark-window X/Y/Z geometry detector
+- OpenCV startup/build
+- camera launch
+- short exact-viewfinder capture
+- game logic
+- solver Stop Search
+- solver default playback: Ultra 0.30 sec
+
+WHAT CHANGED
+------------
+The weak fuzzy sibling selector has been replaced.
+
+Recognition now works in three stages:
+
+1) COLOR FAMILY
+   red / orange / yellow / green / blue / purple
+
+2) COLORED-FILL MAP
+   Inside the detected emoji disk, the scanner measures where the brighter
+   family-colored pixels live. Dark complementary portions receive much less weight.
+
+3) SIBLING GEOMETRY
+   Only the three siblings in that color family are compared:
+   - partial A
+   - partial B
+   - full
+
+The comparison uses:
+- overall colored coverage (partial vs full)
+- colored centroid (which side/half)
+- 8 angular sectors
+- 4 quadrants
+- 4x4 spatial fill grid
+
+X and Y use the same known occlusion mask on the live crop AND on every reference,
+so the plaque in front should not make a full emoji falsely appear partial.
+
+WHY
+---
+v0.13.16 correctly identified colors but repeatedly biased toward the full-color
+third sibling (for example E15 blue and E6 orange). v0.13.17 explicitly solves
+the partial-A / partial-B / full distinction instead of asking generic image
+similarity to infer it.
+
+VISIBLE VERSION
+---------------
+PPAI JS v0.13.17
