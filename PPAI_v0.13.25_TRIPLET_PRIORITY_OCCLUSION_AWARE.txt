@@ -1,0 +1,15 @@
+PPAI v0.13.25
+
+Geometry changes
+- Three same-size dark windows remain the primary path.
+- Radius uniformity remains a hard gate (largest/smallest <= 1.38x).
+- Shallow-wedge angle is now perspective-tolerant (hard plausible range 138-170 deg).
+- 145-165 deg receives full angle credit.
+- A physically convincing same-size / well-spaced three-circle consensus receives a lock floor so it is preferred over two-circle inference.
+
+Recognition changes
+- X and Y sibling classification is now geometry-derived occlusion-aware.
+- Y is treated as covering X; Z is treated as covering Y; Z is unobscured.
+- The actual X/Y/Z centers and radii determine a conservative visibility cut for X and Y.
+- Hidden pixels are excluded from BOTH live and reference sibling comparisons, so an unmatched/full emoji is not penalized simply because the plaque in front physically covers part of it.
+- Color-family logic is otherwise unchanged in this build.
